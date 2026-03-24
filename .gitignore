@@ -1,0 +1,22 @@
+# Rust build outputs
+/target/
+**/target/
+/Cargo.lock
+**/Cargo.lock
+
+# Node package outputs
+/node_modules/
+**/node_modules/
+/dist/
+**/dist/
+/coverage/
+**/coverage/
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+
+# Logs and temp files
+*.log
+*.tmp
