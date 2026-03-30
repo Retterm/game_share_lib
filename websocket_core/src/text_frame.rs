@@ -27,9 +27,7 @@ pub fn encode_response_text_frame(
     Ok(encode_typed_response(response)?)
 }
 
-pub fn encode_event_text_frame(
-    event: &RpcEvent<JsonValue>,
-) -> Result<String, TransportError> {
+pub fn encode_event_text_frame(event: &RpcEvent<JsonValue>) -> Result<String, TransportError> {
     Ok(encode_typed_event(event)?)
 }
 
@@ -61,7 +59,7 @@ mod tests {
     #[test]
     fn rejects_plain_request() {
         let error = parse_text_frame(r#"{"uuid":"req-1","kind":"lifecycle.start","payload":{}}"#)
-        .expect_err("typed mode should reject plain request");
+            .expect_err("typed mode should reject plain request");
         assert!(matches!(error, TransportError::InvalidTextFrame));
     }
 

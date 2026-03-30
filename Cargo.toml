@@ -1,3 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["websocket_core", "websocket_runtime"]
+members = [
+  "websocket_core",
+  "websocket_runtime",
+  "rust/retterm-game-server-modules",
+  "rust/retterm-game-manager-modules",
+]

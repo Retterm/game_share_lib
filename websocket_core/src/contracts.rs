@@ -96,7 +96,9 @@ pub fn encode_typed_request(request: &RpcRequest<JsonValue>) -> Result<String, s
 }
 
 /// Build typed envelope JSON string for a response.
-pub fn encode_typed_response(response: &RpcResponse<JsonValue>) -> Result<String, serde_json::Error> {
+pub fn encode_typed_response(
+    response: &RpcResponse<JsonValue>,
+) -> Result<String, serde_json::Error> {
     serde_json::to_string(&serde_json::json!({
         "type": ENVELOPE_TYPE_RPC_RESPONSE,
         "id": response.uuid,
@@ -138,7 +140,11 @@ pub fn typed_envelope_to_request(v: &Value) -> Option<RpcRequest<JsonValue>> {
 
 /// Convert typed-envelope Value (with type "rpc_response") into RpcResponse.
 pub fn typed_envelope_to_response(v: &Value) -> Option<RpcResponse<JsonValue>> {
-    let id = v.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+    let id = v
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     let status = match v.get("status").and_then(Value::as_str) {
         Some("ok") => RpcStatus::Ok,
         Some("error") => RpcStatus::Error,
@@ -149,8 +155,16 @@ pub fn typed_envelope_to_response(v: &Value) -> Option<RpcResponse<JsonValue>> {
         if e.is_null() {
             return None;
         }
-        let code = e.get("code").and_then(Value::as_str).unwrap_or("").to_string();
-        let message = e.get("message").and_then(Value::as_str).unwrap_or("").to_string();
+        let code = e
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let message = e
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         Some(RpcError { code, message })
     });
     Some(RpcResponse {
@@ -165,10 +179,7 @@ pub fn typed_envelope_to_response(v: &Value) -> Option<RpcResponse<JsonValue>> {
 pub fn typed_envelope_to_event(v: &Value) -> Option<RpcEvent<JsonValue>> {
     let kind = v.get("kind").and_then(Value::as_str)?.to_string();
     let payload = v.get("payload").cloned().unwrap_or(Value::Null);
-    Some(RpcEvent {
-        kind,
-        payload,
-    })
+    Some(RpcEvent { kind, payload })
 }
 
 #[cfg(test)]
@@ -211,7 +222,10 @@ mod tests {
         assert_eq!(decoded.uuid, resp.uuid);
         assert_eq!(decoded.status, resp.status);
         assert_eq!(decoded.payload, resp.payload);
-        assert_eq!(decoded.error.as_ref().map(|e| &e.code), Some(&"busy".to_string()));
+        assert_eq!(
+            decoded.error.as_ref().map(|e| &e.code),
+            Some(&"busy".to_string())
+        );
     }
 
     #[test]

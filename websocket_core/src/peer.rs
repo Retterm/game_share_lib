@@ -335,7 +335,9 @@ mod tests {
             payload: json!({ "echo": true }),
             ..Default::default()
         };
-        let text = peer.encode_request_text(&request).expect("serialize request");
+        let text = peer
+            .encode_request_text(&request)
+            .expect("serialize request");
         let outcome = peer.handle_text_frame(&text).await.expect("handle text");
         match outcome {
             InboundTextFrame::Request(parsed) => assert_eq!(parsed.kind, "game.echo"),

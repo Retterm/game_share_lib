@@ -11,8 +11,8 @@ pub use binproto::{
     encode_binary_frame as encode,
 };
 pub use contracts::{
-    JsonValue, RpcError, RpcEvent, RpcRequest, RpcResponse, RpcStatus, ENVELOPE_TYPE_EVENT,
-    ENVELOPE_TYPE_RPC_REQUEST, ENVELOPE_TYPE_RPC_RESPONSE, encode_typed_event,
+    ENVELOPE_TYPE_EVENT, ENVELOPE_TYPE_RPC_REQUEST, ENVELOPE_TYPE_RPC_RESPONSE, JsonValue,
+    RpcError, RpcEvent, RpcRequest, RpcResponse, RpcStatus, encode_typed_event,
     encode_typed_request, encode_typed_response, parse_typed_envelope, typed_envelope_to_event,
     typed_envelope_to_request, typed_envelope_to_response,
 };

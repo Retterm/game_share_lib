@@ -222,7 +222,10 @@ impl RuntimeHandle {
         let prepared = self.peer.prepare_request(kind, payload).await;
         let request_id = prepared.request.uuid.clone();
         let text = self.peer.encode_request_text(&prepared.request)?;
-        if let Err(error) = self.send_outbound_reliable(OutboundMessage::Text(text)).await {
+        if let Err(error) = self
+            .send_outbound_reliable(OutboundMessage::Text(text))
+            .await
+        {
             self.peer.cancel_pending_request(&request_id).await;
             return Err(error);
         }
@@ -691,9 +694,11 @@ mod tests {
             OutboundMessage::Text(text) => assert_eq!(text, "occupied"),
             other => panic!("unexpected outbound: {other:?}"),
         }
-        assert!(tokio::time::timeout(Duration::from_millis(20), rx.recv())
-            .await
-            .is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), rx.recv())
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]

@@ -123,7 +123,11 @@ mod tests {
             .insert("server-1".to_string(), SessionState::new("newer", 1))
             .await;
 
-        assert!(!store.remove_if_current(&"server-1".to_string(), "older").await);
+        assert!(
+            !store
+                .remove_if_current(&"server-1".to_string(), "older")
+                .await
+        );
         let current = store
             .get(&"server-1".to_string())
             .await

@@ -140,22 +140,20 @@ pub async fn connect_uds(
 pub async fn connect_once_with_retry(config: ClientConnectConfig) -> Result<RuntimeSession, Error> {
     let mut attempts = 0u32;
     loop {
-        match config.connector.connect(&config.server_token, config.server_uuid).await {
+        match config
+            .connector
+            .connect(&config.server_token, config.server_uuid)
+            .await
+        {
             Ok(EitherSocket::Url(socket)) => {
-                return Ok(run_socket_runtime(
-                    socket,
-                    config.peer.clone(),
-                    config.runtime.clone(),
-                )
-                .await);
+                return Ok(
+                    run_socket_runtime(socket, config.peer.clone(), config.runtime.clone()).await,
+                );
             }
             Ok(EitherSocket::Uds(socket)) => {
-                return Ok(run_socket_runtime(
-                    socket,
-                    config.peer.clone(),
-                    config.runtime.clone(),
-                )
-                .await);
+                return Ok(
+                    run_socket_runtime(socket, config.peer.clone(), config.runtime.clone()).await,
+                );
             }
             Err(error) => {
                 attempts = attempts.saturating_add(1);
@@ -288,6 +286,9 @@ mod tests {
         })
         .await;
         assert!(result.is_ok(), "run loop timed out");
-        assert!(accepts.load(Ordering::SeqCst) >= 2, "should reconnect at least once");
+        assert!(
+            accepts.load(Ordering::SeqCst) >= 2,
+            "should reconnect at least once"
+        );
     }
 }
