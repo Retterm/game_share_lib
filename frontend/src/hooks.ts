@@ -134,11 +134,11 @@ export function useLogSessions() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const refresh = async () => {
+  const refresh = async (range?: { startNs?: string; endNs?: string }) => {
     setLoading(true);
     setError(null);
     try {
-      setItems(await api.listLogSessions());
+      setItems(await api.listLogSessions(range));
     } catch (value) {
       setError(value instanceof Error ? value.message : "failed to load log sessions");
     } finally {
@@ -156,13 +156,17 @@ export function useLogSessions() {
 interface HistoricalLogQuery {
   sessionName: string;
   searchText?: string;
-  startNs: string;
+  pageStartNs: string;
+  rangeStartNs?: string;
+  rangeEndNs?: string;
 }
 
 export async function loadHistoricalLogs({
   sessionName,
   searchText,
-  startNs,
+  pageStartNs,
+  rangeStartNs,
+  rangeEndNs,
 }: HistoricalLogQuery) {
   const limit = 800;
   const escaped = api.escapeLokiString(sessionName);
@@ -173,14 +177,16 @@ export async function loadHistoricalLogs({
 
   let items = await api.queryLogsDetailed({
     q: byName,
-    startNs,
+    startNs: pageStartNs,
+    endNs: rangeEndNs,
     limit,
     direction: "forward",
   });
   if (!items.length) {
     items = await api.queryLogsDetailed({
       q: byTag,
-      startNs,
+      startNs: pageStartNs,
+      endNs: rangeEndNs,
       limit,
       direction: "forward",
     });
@@ -195,6 +201,7 @@ export async function loadHistoricalLogs({
   let probe = await api.queryLogsDetailed({
     q: byName,
     startNs: nextStart,
+    endNs: rangeEndNs,
     limit: 1,
     direction: "forward",
   });
@@ -202,6 +209,7 @@ export async function loadHistoricalLogs({
     probe = await api.queryLogsDetailed({
       q: byTag,
       startNs: nextStart,
+      endNs: rangeEndNs,
       limit: 1,
       direction: "forward",
     });

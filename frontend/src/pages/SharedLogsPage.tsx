@@ -24,7 +24,11 @@ export function SharedLogsPage() {
   const [pageStarts, setPageStarts] = useState<string[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
   const [hasNext, setHasNext] = useState(false);
+  const [rangeStartInput, setRangeStartInput] = useState("");
+  const [rangeEndInput, setRangeEndInput] = useState("");
+  const [sessionSearch, setSessionSearch] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
+  const rangeRef = useRef<{ startNs?: string; endNs?: string }>({});
   const {
     items: sessions,
     error: sessionsError,
@@ -39,18 +43,26 @@ export function SharedLogsPage() {
     return formatTsNoMs(ms);
   }, [selected]);
 
-  const loadSessions = async () => {
-    await refreshSessions();
+  const rangeError = useMemo(() => validateRangeInputs(rangeStartInput, rangeEndInput), [rangeStartInput, rangeEndInput]);
+
+  const loadSessions = async (range?: { startNs?: string; endNs?: string }) => {
+    await refreshSessions(range);
   };
 
-  const loadPage = async (sessionName: string, startNs: string) => {
+  const loadPage = async (
+    sessionName: string,
+    pageStartNs: string,
+    range?: { startNs?: string; endNs?: string },
+  ) => {
     setLoading(true);
     setError(null);
     try {
       const result = await loadHistoricalLogs({
         sessionName,
         searchText: search,
-        startNs,
+        pageStartNs,
+        rangeStartNs: range?.startNs,
+        rangeEndNs: range?.endNs,
       });
       setPageItems(result.items);
       setHasNext(result.hasNext);
@@ -66,13 +78,16 @@ export function SharedLogsPage() {
     }
   };
 
-  const resetAndLoad = async (sessionName: string) => {
-    const startMs =
-      parseUnixMsFromSessionName(sessionName) ?? Date.now() - 30 * 24 * 3600 * 1000;
-    const startNs = String(startMs * 1_000_000);
+  const resetAndLoad = async (
+    sessionName: string,
+    range: { startNs?: string; endNs?: string },
+  ) => {
+    const startNs =
+      range.startNs ??
+      String((parseUnixMsFromSessionName(sessionName) ?? Date.now() - 30 * 24 * 3600 * 1000) * 1_000_000);
     setPageStarts([startNs]);
     setPageIndex(0);
-    await loadPage(sessionName, startNs);
+    await loadPage(sessionName, startNs, range);
   };
 
   useEffect(() => {
@@ -86,10 +101,30 @@ export function SharedLogsPage() {
       const first = sessions[0].name;
       setSelected(first);
       setTimeout(() => {
-        void resetAndLoad(first);
+        void resetAndLoad(first, rangeRef.current);
       }, 0);
     }
   }, [selected, sessions]);
+
+  const executeQuery = async () => {
+    if (rangeError) {
+      setError(rangeError);
+      return;
+    }
+    const nextRange = buildRangeNs(rangeStartInput, rangeEndInput);
+    rangeRef.current = nextRange;
+    setError(null);
+    await loadSessions(nextRange);
+    if (selected) {
+      await resetAndLoad(selected, nextRange);
+    }
+  };
+
+  const filteredSessions = useMemo(() => {
+    const query = sessionSearch.trim().toLowerCase();
+    if (!query) return sessions;
+    return sessions.filter((session) => session.name.toLowerCase().includes(query));
+  }, [sessionSearch, sessions]);
 
   const items = useMemo(() => {
     const mapped = pageItems.map((item) => ({
@@ -117,11 +152,53 @@ export function SharedLogsPage() {
       asidePosition="start"
       asideClassName="w-full 2xl:w-[calc(18rem+6ch)]"
       scrollY
+      header={
+        <Card className="border-white/10 bg-white/[0.03]">
+          <CardContent className="flex flex-wrap items-end gap-3 p-4">
+            <div className="min-w-[14rem] flex-1">
+              <div className="mb-1 text-xs text-muted-foreground">Session 搜索</div>
+              <Input
+                placeholder="输入 session 名称"
+                value={sessionSearch}
+                onChange={(event) => setSessionSearch(event.target.value)}
+              />
+            </div>
+            <div className="min-w-[15rem] flex-1">
+              <div className="mb-1 text-xs text-muted-foreground">开始时间</div>
+              <Input
+                type="datetime-local"
+                value={rangeStartInput}
+                onChange={(event) => {
+                  setRangeStartInput(event.target.value);
+                }}
+              />
+            </div>
+            <div className="min-w-[15rem] flex-1">
+              <div className="mb-1 text-xs text-muted-foreground">结束时间</div>
+              <Input
+                type="datetime-local"
+                value={rangeEndInput}
+                onChange={(event) => {
+                  setRangeEndInput(event.target.value);
+                }}
+              />
+            </div>
+            <Button onClick={() => void executeQuery()} disabled={sessionsLoading || loading}>
+              查询
+            </Button>
+          </CardContent>
+        </Card>
+      }
       aside={
         <Card className="h-full flex flex-col min-h-0">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-base">日志会话</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => void loadSessions()} disabled={sessionsLoading}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadSessions(rangeRef.current)}
+              disabled={sessionsLoading}
+            >
               刷新
             </Button>
           </CardHeader>
@@ -135,7 +212,7 @@ export function SharedLogsPage() {
               </div>
             ) : (
               <ul className="space-y-2">
-                {sessions.map((session) => (
+                {filteredSessions.map((session) => (
                   <li key={session.name}>
                     <button
                       className={
@@ -149,7 +226,7 @@ export function SharedLogsPage() {
                       }
                       onClick={() => {
                         setSelected(session.name);
-                        void resetAndLoad(session.name);
+                        void resetAndLoad(session.name, rangeRef.current);
                       }}
                       title={session.name}
                     >
@@ -177,7 +254,7 @@ export function SharedLogsPage() {
                     </button>
                   </li>
                 ))}
-                {!sessions.length ? (
+                {!filteredSessions.length ? (
                   <li className="px-2 py-1 text-xs text-muted-foreground">暂无会话</li>
                 ) : null}
               </ul>
@@ -216,7 +293,7 @@ export function SharedLogsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  if (selected) void resetAndLoad(selected);
+                  if (selected) void resetAndLoad(selected, rangeRef.current);
                 }}
                 disabled={loading || !selected}
               >
@@ -230,7 +307,7 @@ export function SharedLogsPage() {
                     if (!selected || pageIndex <= 0) return;
                     const nextIndex = pageIndex - 1;
                     setPageIndex(nextIndex);
-                    void loadPage(selected, pageStarts[nextIndex]);
+                    void loadPage(selected, pageStarts[nextIndex], rangeRef.current);
                   }}
                   disabled={loading || pageIndex <= 0 || !selected}
                 >
@@ -250,7 +327,7 @@ export function SharedLogsPage() {
                     nextPageStarts.push(nextStart);
                     setPageStarts(nextPageStarts);
                     setPageIndex(nextIndex);
-                    void loadPage(selected, nextStart);
+                    void loadPage(selected, nextStart, rangeRef.current);
                   }}
                   disabled={loading || !hasNext || !selected}
                 >
@@ -287,9 +364,35 @@ export function SharedLogsPage() {
 }
 
 function parseUnixMsFromSessionName(sessionName: string) {
-  const match = String(sessionName).match(/(\d{13})/);
-  if (match) return Number(match[1]);
+  const match = String(sessionName).match(/-(\d{10,13})(?:-|$)/);
+  if (!match) return null;
+  const raw = match[1];
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  if (raw.length === 10) return value * 1000;
+  if (raw.length === 13) return value;
   return null;
+}
+
+function validateRangeInputs(startInput: string, endInput: string) {
+  const start = startInput ? new Date(startInput).getTime() : null;
+  const end = endInput ? new Date(endInput).getTime() : null;
+  if ((startInput && !Number.isFinite(start || NaN)) || (endInput && !Number.isFinite(end || NaN))) {
+    return "时间格式无效";
+  }
+  if (start !== null && end !== null && start > end) {
+    return "开始时间不能晚于结束时间";
+  }
+  return null;
+}
+
+function buildRangeNs(startInput: string, endInput: string) {
+  const startMs = startInput ? new Date(startInput).getTime() : null;
+  const endMs = endInput ? new Date(endInput).getTime() : null;
+  return {
+    startNs: startMs !== null && Number.isFinite(startMs) ? String(startMs * 1_000_000) : undefined,
+    endNs: endMs !== null && Number.isFinite(endMs) ? String(endMs * 1_000_000) : undefined,
+  };
 }
 
 function formatTsNoMs(ts: number) {

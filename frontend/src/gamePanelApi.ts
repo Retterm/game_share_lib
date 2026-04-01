@@ -216,11 +216,21 @@ export function createGamePanelApi() {
         body: JSON.stringify({ src, dst }),
       });
     },
-    getLogSessions<T>() {
-      return request<T>(buildServerPath("/logs/sessions"));
+    getLogSessions<T>(range?: { startNs?: string; endNs?: string }) {
+      const params = new URLSearchParams();
+      if (range?.startNs) params.set("start", range.startNs);
+      if (range?.endNs) params.set("end", range.endNs);
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return request<T>(`${buildServerPath("/logs/sessions")}${suffix}`);
     },
-    async listLogSessions() {
-      const payload = await request<{ sessions?: LogSessionItem[] } | LogSessionItem[]>(buildServerPath("/logs/sessions"));
+    async listLogSessions(range?: { startNs?: string; endNs?: string }) {
+      const params = new URLSearchParams();
+      if (range?.startNs) params.set("start", range.startNs);
+      if (range?.endNs) params.set("end", range.endNs);
+      const suffix = params.size ? `?${params.toString()}` : "";
+      const payload = await request<{ sessions?: LogSessionItem[] } | LogSessionItem[]>(
+        `${buildServerPath("/logs/sessions")}${suffix}`,
+      );
       if (Array.isArray(payload)) return payload;
       return Array.isArray(payload.sessions) ? payload.sessions : [];
     },
