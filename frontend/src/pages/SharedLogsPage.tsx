@@ -373,12 +373,12 @@ export function SharedLogsPage() {
                         <div className="flex items-start gap-3 font-mono">
                           {line.prefix ? (
                             <span
-                              className={`${prefixWidthClass(showDate, showTime)} shrink-0 cursor-default select-none text-slate-400 group-hover:text-slate-300`}
+                              className={`${prefixWidthClass(showDate, showTime)} shrink-0 cursor-default select-none text-slate-400 group-hover:text-slate-200`}
                             >
                               {line.prefix}
                             </span>
                           ) : null}
-                          <span className="w-[10ch] shrink-0 cursor-default select-none text-sky-300/80 group-hover:text-sky-200">
+                          <span className="w-[10ch] shrink-0 cursor-default select-none text-sky-300/80 group-hover:text-sky-100">
                             [{line.stream}]
                           </span>
                           <span className="min-w-0 flex-1 cursor-text whitespace-pre-wrap break-words text-slate-100/95">
@@ -389,7 +389,7 @@ export function SharedLogsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="px-4 py-3 font-mono whitespace-pre-wrap">
+                  <div className="px-3 py-2.5 font-mono whitespace-pre-wrap">
                     {loading ? "日志加载中..." : "暂无日志"}
                   </div>
                 )}
@@ -469,12 +469,12 @@ function prefixWidthClass(showDate: boolean, showTime: boolean) {
 function logLineClassName(type: "input" | "output" | "error") {
   const tone =
     type === "error"
-      ? "bg-red-500/[0.05] text-red-50 before:bg-red-400/80 hover:bg-red-500/12"
+      ? "bg-red-500/[0.06] text-red-50 before:bg-red-400 hover:bg-red-500/18"
       : type === "input"
-        ? "before:bg-amber-300/70 hover:bg-amber-400/10"
-        : "before:bg-sky-300/70 hover:bg-sky-400/10";
+        ? "before:bg-amber-300 hover:bg-amber-400/16"
+        : "before:bg-sky-300 hover:bg-sky-400/16";
   return (
-    "group relative cursor-text px-4 py-2 transition-colors before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:transition-opacity " +
+    "group relative cursor-text px-3 py-2 transition-colors before:absolute before:left-0 before:top-[2px] before:bottom-[2px] before:w-[2px] before:rounded-full before:transition-opacity before:duration-150 " +
     (type === "error" ? "before:opacity-100 " : "before:opacity-0 hover:before:opacity-100 ") +
     tone
   );
