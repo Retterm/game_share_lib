@@ -171,8 +171,8 @@ export function SharedLogsPage() {
       asideClassName="w-full 2xl:w-[calc(18rem+6ch)]"
       scrollY
       header={
-        <Card className="border-white/10 bg-white/[0.03]">
-          <CardContent className="flex flex-wrap items-stretch gap-4 p-5">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="min-w-[14rem] flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
               <div className="mb-2 text-xs font-medium text-muted-foreground">Session 搜索</div>
               <Input
@@ -201,15 +201,17 @@ export function SharedLogsPage() {
                 }}
               />
             </div>
-            <Button
-              className="min-h-11 self-center px-5"
-              onClick={() => void executeQuery()}
-              disabled={sessionsLoading || loading}
-            >
-              查询
-            </Button>
-          </CardContent>
-        </Card>
+            <div className="flex min-h-[78px] items-center self-stretch">
+              <Button
+                className="h-10 px-5"
+                onClick={() => void executeQuery()}
+                disabled={sessionsLoading || loading}
+              >
+                查询
+              </Button>
+            </div>
+          </div>
+        </div>
       }
       aside={
         <Card className="h-full flex flex-col min-h-0">
@@ -475,11 +477,11 @@ function prefixWidthClass(showDate: boolean, showTime: boolean) {
 function logLineClassName(type: "input" | "output" | "error") {
   const tone =
     type === "error"
-      ? "bg-red-500/[0.08] text-red-50 border-l border-red-400/15 hover:bg-red-500/20"
+      ? "bg-red-500/[0.08] text-red-50 border-l border-red-400/15 hover:bg-red-500/28"
       : type === "input"
-        ? "hover:bg-amber-400/20"
-        : "hover:bg-sky-400/20";
-  return "group relative cursor-text px-4 py-2.5 transition-colors " + tone;
+        ? "hover:bg-amber-400/28"
+        : "hover:bg-sky-400/28";
+  return "group relative cursor-text px-4 py-3 transition-colors duration-150 " + tone;
 }
 
 function logLineAccentClassName(type: "input" | "output" | "error") {
