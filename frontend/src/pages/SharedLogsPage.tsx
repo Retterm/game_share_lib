@@ -171,9 +171,9 @@ export function SharedLogsPage() {
       asideClassName="w-full 2xl:w-[calc(18rem+6ch)]"
       scrollY
       header={
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="border-b border-white/10 pb-4">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="min-w-[14rem] flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+            <div className="min-w-[14rem] flex-1 px-1 py-1">
               <div className="mb-2 text-xs font-medium text-muted-foreground">Session 搜索</div>
               <Input
                 placeholder="输入 session 名称"
@@ -181,7 +181,7 @@ export function SharedLogsPage() {
                 onChange={(event) => setSessionSearch(event.target.value)}
               />
             </div>
-            <div className="min-w-[15rem] flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+            <div className="min-w-[15rem] flex-1 px-1 py-1">
               <div className="mb-2 text-xs font-medium text-muted-foreground">开始时间</div>
               <Input
                 type="datetime-local"
@@ -191,7 +191,7 @@ export function SharedLogsPage() {
                 }}
               />
             </div>
-            <div className="min-w-[15rem] flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+            <div className="min-w-[15rem] flex-1 px-1 py-1">
               <div className="mb-2 text-xs font-medium text-muted-foreground">结束时间</div>
               <Input
                 type="datetime-local"
@@ -201,7 +201,7 @@ export function SharedLogsPage() {
                 }}
               />
             </div>
-            <div className="flex min-h-[78px] items-center self-stretch">
+            <div className="flex min-h-[72px] items-center justify-center self-stretch px-1">
               <Button
                 className="h-10 px-5"
                 onClick={() => void executeQuery()}
@@ -290,27 +290,27 @@ export function SharedLogsPage() {
       <PanelSurface>
         <div className="flex h-full min-h-0 flex-col">
           <div className="border-b border-white/10 px-4 pb-4 pt-3">
-            <div className="space-y-2">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <div className="text-base font-semibold text-foreground">日志详情</div>
               {selected ? (
-                <div className="border-l border-white/15 pl-3 text-sm text-foreground/90">
-                  <div className="break-all">{selected}</div>
+                <div className="min-w-0 text-sm text-foreground/90">
+                  <span className="break-all">{selected}</span>
                   {selectedHumanTime ? (
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <span className="ml-2 whitespace-nowrap text-xs text-muted-foreground">
                       开始时间 {selectedHumanTime}
-                    </div>
+                    </span>
                   ) : null}
                 </div>
               ) : null}
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+            <div className="mt-4 flex flex-wrap items-center gap-3 px-1 py-1">
               <div className="flex items-center gap-2">
                 <Button variant={tab === "all" ? "default" : "outline"} size="sm" onClick={() => setTab("all")}>全部</Button>
                 <Button variant={tab === "input" ? "default" : "outline"} size="sm" onClick={() => setTab("input")}>输入</Button>
                 <Button variant={tab === "output" ? "default" : "outline"} size="sm" onClick={() => setTab("output")}>输出</Button>
                 <Button variant={tab === "error" ? "default" : "outline"} size="sm" onClick={() => setTab("error")}>错误</Button>
               </div>
-              <div className="mx-2 flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-black/10 px-3">
+              <div className="mx-2 flex min-h-10 items-center gap-2 px-1">
                 <span className="text-xs text-muted-foreground">显示日期</span>
                 <Switch checked={showDate} onCheckedChange={(value) => setShowDate(Boolean(value))} />
                 <span className="text-xs text-muted-foreground">显示时间</span>
@@ -477,11 +477,11 @@ function prefixWidthClass(showDate: boolean, showTime: boolean) {
 function logLineClassName(type: "input" | "output" | "error") {
   const tone =
     type === "error"
-      ? "bg-red-500/[0.08] text-red-50 border-l border-red-400/15 hover:bg-red-500/28"
+      ? "border-l border-red-400/25 bg-red-500/[0.08] text-red-50 hover:bg-red-500/32 hover:text-white"
       : type === "input"
-        ? "hover:bg-amber-400/28"
-        : "hover:bg-sky-400/28";
-  return "group relative cursor-text px-4 py-3 transition-colors duration-150 " + tone;
+        ? "hover:bg-amber-300/22 hover:text-amber-50"
+        : "hover:bg-sky-300/22 hover:text-white";
+  return "group relative cursor-text px-4 py-3 transition-[background-color,color,border-color] duration-150 " + tone;
 }
 
 function logLineAccentClassName(type: "input" | "output" | "error") {
