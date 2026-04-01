@@ -126,6 +126,8 @@ export function SharedLogsPage() {
     return sessions.filter((session) => session.name.toLowerCase().includes(query));
   }, [sessionSearch, sessions]);
 
+  const searchQuery = search.trim();
+
   const items = useMemo(() => {
     const mapped = pageItems.map((item) => ({
       ...item,
@@ -138,13 +140,29 @@ export function SharedLogsPage() {
         typeof b.tsNs === "number" && Number.isFinite(b.tsNs) ? b.tsNs : b.ts * 1_000_000;
       return an - bn;
     });
-    const query = search.trim().toLowerCase();
+    const query = searchQuery.toLowerCase();
     return mapped.filter((item) => {
       const byTab = tab === "all" ? true : item.type === tab;
       const bySearch = query ? item.text.toLowerCase().includes(query) : true;
       return byTab && bySearch;
     });
-  }, [pageItems, search, tab]);
+  }, [pageItems, searchQuery, tab]);
+
+  const displayLines = useMemo(
+    () =>
+      items.map((item) => {
+        const prefix = formatLogPrefix(item.ts, showDate, showTime);
+        const stream = item.stream || item.type;
+        return {
+          key: `${item.tsNs ?? item.ts}-${stream}-${item.text}`,
+          prefix,
+          stream,
+          type: item.type,
+          text: item.text,
+        };
+      }),
+    [items, showDate, showTime],
+  );
 
   return (
     <PanelScaffold
@@ -265,17 +283,17 @@ export function SharedLogsPage() {
     >
       <PanelSurface>
         <Card className="h-full flex flex-col border-0 shadow-none">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">
-              日志详情
+          <CardHeader className="space-y-3">
+            <div className="space-y-1">
+              <CardTitle className="text-base">日志详情</CardTitle>
               {selected ? (
-                <span className="ml-2 align-middle text-xs text-muted-foreground">
+                <div className="text-sm text-foreground break-all">
                   {selected}
-                  {selectedHumanTime ? <span className="ml-2">（开始时间 {selectedHumanTime}）</span> : null}
-                </span>
+                  {selectedHumanTime ? `（开始时间 ${selectedHumanTime}）` : ""}
+                </div>
               ) : null}
-            </CardTitle>
-            <div className="flex items-center gap-2">
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Button variant={tab === "all" ? "default" : "outline"} size="sm" onClick={() => setTab("all")}>全部</Button>
                 <Button variant={tab === "input" ? "default" : "outline"} size="sm" onClick={() => setTab("input")}>输入</Button>
@@ -343,18 +361,35 @@ export function SharedLogsPage() {
               </Alert>
             ) : null}
             <div ref={listRef} className="h-full overflow-auto px-4 pb-4">
-              <pre className="min-h-full rounded-md border border-border bg-background px-4 py-3 text-xs leading-5 text-slate-100">
-                {items.length
-                  ? items
-                      .map((item) => {
-                        const prefix = formatLogPrefix(item.ts, showDate, showTime);
-                        return `${prefix}${prefix ? " " : ""}[${item.stream || item.type}] ${item.text}`;
-                      })
-                      .join("\n")
-                  : loading
-                    ? "日志加载中..."
-                    : "暂无日志"}
-              </pre>
+              <div className="min-h-full rounded-md border border-border bg-background px-4 py-3 text-xs leading-5 text-slate-100">
+                {displayLines.length ? (
+                  <div className="space-y-1">
+                    {displayLines.map((line) => (
+                      <div key={line.key} className={logLineClassName(line.type)}>
+                        <div className="flex items-start gap-3 font-mono">
+                          {line.prefix ? (
+                            <span
+                              className={`${prefixWidthClass(showDate, showTime)} shrink-0 select-none text-slate-400 group-hover:text-slate-300`}
+                            >
+                              {line.prefix}
+                            </span>
+                          ) : null}
+                          <span className="w-[10ch] shrink-0 select-none text-sky-300/80 group-hover:text-sky-200">
+                            [{line.stream}]
+                          </span>
+                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                            {renderHighlightedText(line.text, searchQuery)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="font-mono whitespace-pre-wrap">
+                    {loading ? "日志加载中..." : "暂无日志"}
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -418,6 +453,58 @@ function formatLogPrefix(ts: number, showDate: boolean, showTime: boolean) {
   if (showDate && showTime) return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
   if (showDate) return `${yyyy}-${mm}-${dd}`;
   return `${hh}:${mi}:${ss}`;
+}
+
+function prefixWidthClass(showDate: boolean, showTime: boolean) {
+  if (showDate && showTime) return "w-[19ch]";
+  if (showDate) return "w-[10ch]";
+  if (showTime) return "w-[8ch]";
+  return "w-0";
+}
+
+function logLineClassName(type: "input" | "output" | "error") {
+  const tone =
+    type === "error"
+      ? "border-red-400/15 bg-red-500/[0.06] text-red-50 before:bg-red-400/80 hover:bg-red-500/12"
+      : type === "input"
+        ? "before:bg-amber-300/70 hover:bg-amber-400/10"
+        : "before:bg-sky-300/70 hover:bg-sky-400/10";
+  return (
+    "group relative rounded-md border px-3 py-1.5 transition-colors before:absolute before:left-0 before:top-1 before:bottom-1 before:w-px before:rounded-full before:transition-opacity hover:border-white/10 " +
+    (type === "error" ? "before:opacity-100 " : "border-transparent before:opacity-0 hover:before:opacity-100 ") +
+    tone
+  );
+}
+
+function renderHighlightedText(text: string, query: string) {
+  const parts = splitHighlightParts(text, query);
+  return parts.map((part, index) =>
+    part.match ? (
+      <mark
+        key={`${part.text}-${index}`}
+        className="rounded bg-yellow-300/20 px-1 text-yellow-100"
+      >
+        {part.text}
+      </mark>
+    ) : (
+      <span key={`${part.text}-${index}`}>{part.text}</span>
+    ),
+  );
+}
+
+function splitHighlightParts(text: string, query: string) {
+  if (!query) return [{ text, match: false }];
+  const escapedQuery = escapeRegExp(query);
+  if (!escapedQuery) return [{ text, match: false }];
+  const matcher = new RegExp(`(${escapedQuery})`, "gi");
+  return text
+    .split(matcher)
+    .filter(Boolean)
+    .map((part) => ({ text: part, match: part.toLowerCase() === query.toLowerCase() }));
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function classifyLogType(stream?: string, text?: string): "input" | "output" | "error" {
