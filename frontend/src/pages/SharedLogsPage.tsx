@@ -282,18 +282,22 @@ export function SharedLogsPage() {
       }
     >
       <PanelSurface>
-        <Card className="h-full flex flex-col border-0 shadow-none">
-          <CardHeader className="space-y-3">
-            <div className="space-y-1">
-              <CardTitle className="text-base">日志详情</CardTitle>
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="border-b border-white/10 px-4 pb-4 pt-3">
+            <div className="space-y-2">
+              <div className="text-base font-semibold text-foreground">日志详情</div>
               {selected ? (
-                <div className="text-sm text-foreground break-all">
-                  {selected}
-                  {selectedHumanTime ? `（开始时间 ${selectedHumanTime}）` : ""}
+                <div className="border-l border-white/15 pl-3 text-sm text-foreground/90">
+                  <div className="break-all">{selected}</div>
+                  {selectedHumanTime ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      开始时间 {selectedHumanTime}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Button variant={tab === "all" ? "default" : "outline"} size="sm" onClick={() => setTab("all")}>全部</Button>
                 <Button variant={tab === "input" ? "default" : "outline"} size="sm" onClick={() => setTab("input")}>输入</Button>
@@ -353,31 +357,31 @@ export function SharedLogsPage() {
                 </Button>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
             {error ? (
               <Alert className="mx-4 mt-4" variant="destructive">
                 {error}
               </Alert>
             ) : null}
-            <div ref={listRef} className="h-full overflow-auto px-4 pb-4">
-              <div className="min-h-full rounded-md border border-border bg-background px-4 py-3 text-xs leading-5 text-slate-100">
+            <div ref={listRef} className="h-full overflow-auto px-4 pb-4 pt-3">
+              <div className="min-h-full border border-white/10 bg-background/40 text-xs leading-5 text-slate-100">
                 {displayLines.length ? (
-                  <div className="space-y-1">
+                  <div className="divide-y divide-white/8">
                     {displayLines.map((line) => (
                       <div key={line.key} className={logLineClassName(line.type)}>
                         <div className="flex items-start gap-3 font-mono">
                           {line.prefix ? (
                             <span
-                              className={`${prefixWidthClass(showDate, showTime)} shrink-0 select-none text-slate-400 group-hover:text-slate-300`}
+                              className={`${prefixWidthClass(showDate, showTime)} shrink-0 cursor-default select-none text-slate-400 group-hover:text-slate-300`}
                             >
                               {line.prefix}
                             </span>
                           ) : null}
-                          <span className="w-[10ch] shrink-0 select-none text-sky-300/80 group-hover:text-sky-200">
+                          <span className="w-[10ch] shrink-0 cursor-default select-none text-sky-300/80 group-hover:text-sky-200">
                             [{line.stream}]
                           </span>
-                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                          <span className="min-w-0 flex-1 cursor-text whitespace-pre-wrap break-words text-slate-100/95">
                             {renderHighlightedText(line.text, searchQuery)}
                           </span>
                         </div>
@@ -385,14 +389,14 @@ export function SharedLogsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="font-mono whitespace-pre-wrap">
+                  <div className="px-4 py-3 font-mono whitespace-pre-wrap">
                     {loading ? "日志加载中..." : "暂无日志"}
                   </div>
                 )}
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </PanelSurface>
     </PanelScaffold>
   );
@@ -465,13 +469,13 @@ function prefixWidthClass(showDate: boolean, showTime: boolean) {
 function logLineClassName(type: "input" | "output" | "error") {
   const tone =
     type === "error"
-      ? "border-red-400/15 bg-red-500/[0.06] text-red-50 before:bg-red-400/80 hover:bg-red-500/12"
+      ? "bg-red-500/[0.05] text-red-50 before:bg-red-400/80 hover:bg-red-500/12"
       : type === "input"
         ? "before:bg-amber-300/70 hover:bg-amber-400/10"
         : "before:bg-sky-300/70 hover:bg-sky-400/10";
   return (
-    "group relative rounded-md border px-3 py-1.5 transition-colors before:absolute before:left-0 before:top-1 before:bottom-1 before:w-px before:rounded-full before:transition-opacity hover:border-white/10 " +
-    (type === "error" ? "before:opacity-100 " : "border-transparent before:opacity-0 hover:before:opacity-100 ") +
+    "group relative cursor-text px-4 py-2 transition-colors before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:transition-opacity " +
+    (type === "error" ? "before:opacity-100 " : "before:opacity-0 hover:before:opacity-100 ") +
     tone
   );
 }
