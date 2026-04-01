@@ -172,17 +172,17 @@ export function SharedLogsPage() {
       scrollY
       header={
         <Card className="border-white/10 bg-white/[0.03]">
-          <CardContent className="flex flex-wrap items-end gap-3 p-4">
-            <div className="min-w-[14rem] flex-1">
-              <div className="mb-1 text-xs text-muted-foreground">Session 搜索</div>
+          <CardContent className="flex flex-wrap items-stretch gap-4 p-5">
+            <div className="min-w-[14rem] flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">Session 搜索</div>
               <Input
                 placeholder="输入 session 名称"
                 value={sessionSearch}
                 onChange={(event) => setSessionSearch(event.target.value)}
               />
             </div>
-            <div className="min-w-[15rem] flex-1">
-              <div className="mb-1 text-xs text-muted-foreground">开始时间</div>
+            <div className="min-w-[15rem] flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">开始时间</div>
               <Input
                 type="datetime-local"
                 value={rangeStartInput}
@@ -191,8 +191,8 @@ export function SharedLogsPage() {
                 }}
               />
             </div>
-            <div className="min-w-[15rem] flex-1">
-              <div className="mb-1 text-xs text-muted-foreground">结束时间</div>
+            <div className="min-w-[15rem] flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">结束时间</div>
               <Input
                 type="datetime-local"
                 value={rangeEndInput}
@@ -201,7 +201,11 @@ export function SharedLogsPage() {
                 }}
               />
             </div>
-            <Button onClick={() => void executeQuery()} disabled={sessionsLoading || loading}>
+            <Button
+              className="min-h-11 self-center px-5"
+              onClick={() => void executeQuery()}
+              disabled={sessionsLoading || loading}
+            >
               查询
             </Button>
           </CardContent>
@@ -220,26 +224,26 @@ export function SharedLogsPage() {
               刷新
             </Button>
           </CardHeader>
-          <CardContent className="p-2 flex-1 min-h-0 overflow-auto">
+          <CardContent className="flex-1 min-h-0 overflow-auto p-3">
             {sessionsLoading ? (
-              <div className="space-y-2 p-1">
+              <div className="space-y-3 p-1">
                 <Skeleton className="h-6 w-full" />
                 <Skeleton className="h-6 w-5/6" />
                 <Skeleton className="h-6 w-4/6" />
                 <Skeleton className="h-6 w-3/6" />
               </div>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {filteredSessions.map((session) => (
                   <li key={session.name}>
                     <button
                       className={
-                        "group relative w-full text-left rounded-lg border px-3 py-2.5 transition-all " +
-                        "bg-white/[0.02] border-white/10 hover:bg-white/[0.05] hover:border-white/25 hover:shadow-sm " +
-                        "active:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 " +
+                        "group relative w-full text-left rounded-xl border px-4 py-3 transition-all " +
+                        "bg-white/[0.02] border-white/10 hover:bg-white/[0.06] hover:border-white/25 hover:shadow-sm " +
+                        "active:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 " +
                         "focus-visible:ring-offset-2 focus-visible:ring-offset-background " +
                         (selected === session.name
-                          ? "ring-2 ring-primary/60 border-primary/40 bg-white/[0.06] shadow-sm before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-primary/70 before:rounded-l-lg"
+                          ? "ring-2 ring-primary/60 border-primary/40 bg-white/[0.07] shadow-sm before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-primary/70 before:rounded-l-xl"
                           : "")
                       }
                       onClick={() => {
@@ -297,23 +301,24 @@ export function SharedLogsPage() {
                 </div>
               ) : null}
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
               <div className="flex items-center gap-2">
                 <Button variant={tab === "all" ? "default" : "outline"} size="sm" onClick={() => setTab("all")}>全部</Button>
                 <Button variant={tab === "input" ? "default" : "outline"} size="sm" onClick={() => setTab("input")}>输入</Button>
                 <Button variant={tab === "output" ? "default" : "outline"} size="sm" onClick={() => setTab("output")}>输出</Button>
                 <Button variant={tab === "error" ? "default" : "outline"} size="sm" onClick={() => setTab("error")}>错误</Button>
               </div>
-              <div className="mx-2 flex items-center gap-2">
+              <div className="mx-2 flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-black/10 px-3">
                 <span className="text-xs text-muted-foreground">显示日期</span>
                 <Switch checked={showDate} onCheckedChange={(value) => setShowDate(Boolean(value))} />
                 <span className="text-xs text-muted-foreground">显示时间</span>
                 <Switch checked={showTime} onCheckedChange={(value) => setShowTime(Boolean(value))} />
               </div>
-              <Input className="w-64" placeholder="搜索日志内容..." value={search} onChange={(event) => setSearch(event.target.value)} />
+              <Input className="h-10 w-64" placeholder="搜索日志内容..." value={search} onChange={(event) => setSearch(event.target.value)} />
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-10 px-4"
                 onClick={() => {
                   if (selected) void resetAndLoad(selected, rangeRef.current);
                 }}
@@ -321,7 +326,7 @@ export function SharedLogsPage() {
               >
                 {loading ? "搜索中..." : "搜索/刷新"}
               </Button>
-              <div className="ml-2 flex items-center gap-2">
+              <div className="ml-2 flex min-h-10 items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -370,6 +375,7 @@ export function SharedLogsPage() {
                   <div className="divide-y divide-white/8">
                     {displayLines.map((line) => (
                       <div key={line.key} className={logLineClassName(line.type)}>
+                        <span aria-hidden="true" className={logLineAccentClassName(line.type)} />
                         <div className="flex items-start gap-3 font-mono">
                           {line.prefix ? (
                             <span
@@ -469,15 +475,21 @@ function prefixWidthClass(showDate: boolean, showTime: boolean) {
 function logLineClassName(type: "input" | "output" | "error") {
   const tone =
     type === "error"
-      ? "bg-red-500/[0.06] text-red-50 before:bg-red-400 hover:bg-red-500/18"
+      ? "bg-red-500/[0.08] text-red-50 border-l border-red-400/15 hover:bg-red-500/20"
       : type === "input"
-        ? "before:bg-amber-300 hover:bg-amber-400/16"
-        : "before:bg-sky-300 hover:bg-sky-400/16";
-  return (
-    "group relative cursor-text px-3 py-2 transition-colors before:absolute before:left-0 before:top-[2px] before:bottom-[2px] before:w-[2px] before:rounded-full before:transition-opacity before:duration-150 " +
-    (type === "error" ? "before:opacity-100 " : "before:opacity-0 hover:before:opacity-100 ") +
-    tone
-  );
+        ? "hover:bg-amber-400/20"
+        : "hover:bg-sky-400/20";
+  return "group relative cursor-text px-4 py-2.5 transition-colors " + tone;
+}
+
+function logLineAccentClassName(type: "input" | "output" | "error") {
+  const color =
+    type === "error"
+      ? "bg-red-400 opacity-100"
+      : type === "input"
+        ? "bg-amber-300 opacity-0 group-hover:opacity-100"
+        : "bg-sky-300 opacity-0 group-hover:opacity-100";
+  return "pointer-events-none absolute left-0 top-[3px] bottom-[3px] w-[3px] rounded-r-full transition-opacity duration-150 " + color;
 }
 
 function renderHighlightedText(text: string, query: string) {
