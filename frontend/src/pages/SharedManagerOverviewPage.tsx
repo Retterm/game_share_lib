@@ -110,7 +110,7 @@ function formFromRule(rule: ManagerRule): RuleFormState {
   form.name = rule.name || "";
   form.description = rule.description || "";
   form.operation = rule.operation || form.operation;
-  form.target_type = rule.target_type || form.target_type;
+  form.target_type = rule.target_type || "";
   form.target_value = rule.target_value || "";
   form.message = rule.message || form.message;
   form.response_json_text = rule.response_json ? JSON.stringify(rule.response_json, null, 2) : "";

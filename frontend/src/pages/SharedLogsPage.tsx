@@ -174,16 +174,17 @@ export function SharedLogsPage() {
         <div className="border-b border-white/10 pb-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="min-w-[14rem] flex-1 px-1 py-1">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Session 搜索</div>
+              <div className="mb-2 text-xs font-medium text-muted-foreground">会话搜索</div>
               <Input
-                placeholder="输入 session 名称"
+                placeholder="输入会话名称"
                 value={sessionSearch}
                 onChange={(event) => setSessionSearch(event.target.value)}
               />
             </div>
-            <div className="min-w-[15rem] flex-1 px-1 py-1">
+            <div className="w-[15.5rem] shrink-0 px-1 py-1">
               <div className="mb-2 text-xs font-medium text-muted-foreground">开始时间</div>
               <Input
+                className="w-full"
                 type="datetime-local"
                 value={rangeStartInput}
                 onChange={(event) => {
@@ -191,9 +192,10 @@ export function SharedLogsPage() {
                 }}
               />
             </div>
-            <div className="min-w-[15rem] flex-1 px-1 py-1">
+            <div className="w-[15.5rem] shrink-0 px-1 py-1">
               <div className="mb-2 text-xs font-medium text-muted-foreground">结束时间</div>
               <Input
+                className="w-full"
                 type="datetime-local"
                 value={rangeEndInput}
                 onChange={(event) => {
@@ -240,12 +242,12 @@ export function SharedLogsPage() {
                   <li key={session.name}>
                     <button
                       className={
-                        "group relative w-full text-left rounded-xl border px-4 py-3 transition-all " +
-                        "bg-white/[0.02] border-white/10 hover:bg-white/[0.06] hover:border-white/25 hover:shadow-sm " +
-                        "active:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 " +
+                        "group relative w-full cursor-pointer text-left rounded-xl border px-4 py-3 transition-all " +
+                        "bg-slate-950/55 border-slate-800/80 hover:bg-slate-900/80 hover:border-slate-700/90 hover:shadow-sm " +
+                        "active:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 " +
                         "focus-visible:ring-offset-2 focus-visible:ring-offset-background " +
                         (selected === session.name
-                          ? "ring-2 ring-primary/60 border-primary/40 bg-white/[0.07] shadow-sm before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-primary/70 before:rounded-l-xl"
+                          ? "border-teal-400/40 border-l-4 bg-slate-900 shadow-sm"
                           : "")
                       }
                       onClick={() => {
@@ -258,16 +260,14 @@ export function SharedLogsPage() {
                         <span
                           className={
                             "mt-0.5 inline-flex shrink-0 px-1.5 py-0.5 rounded text-xs border " +
-                            (session.type === "install"
-                              ? "border-green-500/30 bg-green-500/10 text-green-300"
-                              : "border-blue-500/30 bg-blue-500/10 text-blue-300")
+                            sessionTypeBadgeClassName(session.type)
                           }
                         >
                           {session.type === "install" ? "安装" : "运行"}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="text-sm leading-5 break-all line-clamp-2">{session.name}</div>
-                          <div className="mt-1 text-[12px] text-gray-300/80 tabular-nums">
+                          <div className="mt-1 text-[12px] text-slate-400 tabular-nums">
                             {(() => {
                               const ms = parseUnixMsFromSessionName(session.name);
                               return ms ? `开始时间 ${formatTsNoMs(ms)}` : "开始时间 —";
@@ -371,25 +371,25 @@ export function SharedLogsPage() {
                 {error}
               </Alert>
             ) : null}
-            <div ref={listRef} className="h-full overflow-auto px-4 pb-4 pt-3">
-              <div className="min-h-full border border-white/10 bg-background/40 text-xs leading-5 text-slate-100">
+            <div ref={listRef} className="h-full overflow-auto">
+              <div className="min-h-full border border-slate-800/80 bg-slate-950/72 text-xs leading-5 text-slate-100">
                 {displayLines.length ? (
-                  <div className="divide-y divide-white/8">
+                  <div className="divide-y divide-slate-800/80">
                     {displayLines.map((line) => (
                       <div key={line.key} className={logLineClassName(line.type)}>
                         <span aria-hidden="true" className={logLineAccentClassName(line.type)} />
                         <div className="flex items-start gap-3 font-mono">
                           {line.prefix ? (
                             <span
-                              className={`${prefixWidthClass(showDate, showTime)} shrink-0 cursor-default select-none text-slate-400 group-hover:text-slate-200`}
+                              className={`${prefixWidthClass(showDate, showTime)} shrink-0 cursor-default select-none text-slate-500 group-hover:text-slate-300`}
                             >
                               {line.prefix}
                             </span>
                           ) : null}
-                          <span className="w-[10ch] shrink-0 cursor-default select-none text-sky-300/80 group-hover:text-sky-100">
+                          <span className={`w-[10ch] shrink-0 cursor-default select-none ${streamLabelClassName(line.type)}`}>
                             [{line.stream}]
                           </span>
-                          <span className="min-w-0 flex-1 cursor-text whitespace-pre-wrap break-words text-slate-100/95">
+                          <span className="min-w-0 flex-1 cursor-text whitespace-pre-wrap break-words text-slate-100/92">
                             {renderHighlightedText(line.text, searchQuery)}
                           </span>
                         </div>
@@ -477,21 +477,35 @@ function prefixWidthClass(showDate: boolean, showTime: boolean) {
 function logLineClassName(type: "input" | "output" | "error") {
   const tone =
     type === "error"
-      ? "border-l border-red-400/25 bg-red-500/[0.08] text-red-50 hover:bg-red-500/32 hover:text-white"
+      ? "border-l border-rose-400/20 bg-rose-950/40 text-rose-50 hover:bg-rose-900/55 hover:text-rose-50"
       : type === "input"
-        ? "hover:bg-amber-300/22 hover:text-amber-50"
-        : "hover:bg-sky-300/22 hover:text-white";
+        ? "hover:bg-amber-950/45 hover:text-amber-50"
+        : "hover:bg-teal-950/45 hover:text-teal-50";
   return "group relative cursor-text px-4 py-3 transition-[background-color,color,border-color] duration-150 " + tone;
 }
 
 function logLineAccentClassName(type: "input" | "output" | "error") {
   const color =
     type === "error"
-      ? "bg-red-400 opacity-100"
+      ? "bg-rose-400/90 opacity-100"
       : type === "input"
-        ? "bg-amber-300 opacity-0 group-hover:opacity-100"
-        : "bg-sky-300 opacity-0 group-hover:opacity-100";
+        ? "bg-amber-400/90 opacity-0 group-hover:opacity-100"
+        : "bg-teal-400/90 opacity-0 group-hover:opacity-100";
   return "pointer-events-none absolute left-0 top-[3px] bottom-[3px] w-[3px] rounded-r-full transition-opacity duration-150 " + color;
+}
+
+function streamLabelClassName(type: "input" | "output" | "error") {
+  return type === "error"
+    ? "text-rose-300/85 group-hover:text-rose-100"
+    : type === "input"
+      ? "text-amber-300/85 group-hover:text-amber-100"
+      : "text-teal-300/85 group-hover:text-teal-100";
+}
+
+function sessionTypeBadgeClassName(type: "install" | "runtime") {
+  return type === "install"
+    ? "border-emerald-500/25 bg-emerald-950/55 text-emerald-200"
+    : "border-indigo-500/25 bg-indigo-950/55 text-indigo-200";
 }
 
 function renderHighlightedText(text: string, query: string) {
@@ -500,7 +514,7 @@ function renderHighlightedText(text: string, query: string) {
     part.match ? (
       <mark
         key={`${part.text}-${index}`}
-        className="rounded bg-yellow-300/20 px-1 text-yellow-100"
+        className="rounded bg-fuchsia-400/20 px-1 text-fuchsia-100"
       >
         {part.text}
       </mark>

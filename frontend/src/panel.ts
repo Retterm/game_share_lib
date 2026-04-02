@@ -7,7 +7,7 @@ export interface SharedPanelProps {
   context?: string;
 }
 
-export type PanelLayoutMode = "admin" | "user" | "standalone";
+export type PanelLayoutMode = "admin" | "user";
 
 export function getPanelProps(): SharedPanelProps | null {
   if (typeof window === "undefined") return null;
@@ -15,18 +15,10 @@ export function getPanelProps(): SharedPanelProps | null {
 }
 
 export function getApiBase(): string {
-  const envBase =
-    typeof import.meta !== "undefined" &&
-    import.meta.env &&
-    typeof import.meta.env.VITE_API_BASE === "string"
-      ? import.meta.env.VITE_API_BASE.trim()
-      : "";
-  if (envBase) return envBase.replace(/\/$/, "");
   const props = getPanelProps();
   const explicit = props?.apiBase?.trim();
   if (explicit) return explicit.replace(/\/$/, "");
-  if (typeof window !== "undefined") return window.location.origin;
-  return "";
+  throw new Error("missing panel apiBase");
 }
 
 export function getServerId(): string | undefined {
@@ -50,14 +42,16 @@ export function getBearerToken(mode: "server" | "admin" = "server"): string | nu
 
 export function getPanelLayoutMode(): PanelLayoutMode {
   const context = getPanelProps()?.context?.trim().toLowerCase();
-  if (context === "admin" || context === "user" || context === "standalone") {
+  if (context === "admin" || context === "user") {
     return context;
   }
-  if (typeof window === "undefined") return "standalone";
+  if (typeof window === "undefined") {
+    throw new Error("missing panel context");
+  }
   const path = window.location.pathname || "/";
   if (/^\/my\/servers\/view\/[^/]+/.test(path)) return "user";
   if (/^\/servers\/[^/]+/.test(path) || /^\/games\/[^/]+/.test(path)) return "admin";
-  return "standalone";
+  throw new Error(`unsupported panel route: ${path}`);
 }
 
 export function buildServerPath(path: string): string {
