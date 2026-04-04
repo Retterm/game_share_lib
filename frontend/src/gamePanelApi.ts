@@ -50,6 +50,14 @@ export interface AutoRestartStatus {
   block_reason?: string | null;
 }
 
+function unwrapPayload<T>(value: unknown): T {
+  if (value && typeof value === "object" && "payload" in value) {
+    const payload = (value as { payload?: unknown }).payload;
+    return (payload ?? value) as T;
+  }
+  return value as T;
+}
+
 type LokiRangeResponse = {
   status?: string;
   data?: {
@@ -135,8 +143,9 @@ export function createGamePanelApi() {
     getServerMeta<T>() {
       return request<T>(buildServerPath("/meta"));
     },
-    getProcessStatus<T>() {
-      return request<T>(buildServerPath("/process/status"));
+    async getProcessStatus<T>() {
+      const payload = await request<unknown>(buildServerPath("/process/status"));
+      return unwrapPayload<T>(payload);
     },
     getAutoRestart<T extends AutoRestartStatus>() {
       return request<T>(buildServerPath("/auto-restart"));
