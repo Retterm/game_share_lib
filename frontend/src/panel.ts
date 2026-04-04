@@ -1,6 +1,5 @@
 export interface SharedPanelProps {
   serverId?: string;
-  jwt?: string;
   apiBase?: string;
   serverToken?: string;
   adminToken?: string;
