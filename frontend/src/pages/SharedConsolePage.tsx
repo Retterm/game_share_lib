@@ -9,6 +9,7 @@ import { ConsoleToolbar } from "../components/console/ConsoleToolbar";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader } from "../components/ui/card";
+import { Switch } from "../components/ui/switch";
 import { createGamePanelApi } from "../gamePanelApi";
 import {
   formatBytes,
@@ -38,12 +39,23 @@ export function SharedConsolePage() {
     refresh: loadStatus,
   } = useRuntimeSummary();
   const error = useMergedError(statusError, streamError, metricsError);
+  const [autoRestart, setAutoRestart] = useState<import("../gamePanelApi").AutoRestartStatus | null>(null);
+  const [autoRestartSaving, setAutoRestartSaving] = useState(false);
+
+  const loadAutoRestart = useCallback(async () => {
+    try {
+      setAutoRestart(await api.getAutoRestart());
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : "unknown error");
+    }
+  }, [setStatusError]);
 
   const refreshWithRetry = async (attempts = 4, delayMs = 1500) => {
     let lastError: unknown = null;
     for (let index = 0; index < attempts; index += 1) {
       try {
         await loadStatus();
+        await loadAutoRestart();
         return;
       } catch (error) {
         lastError = error;
@@ -54,6 +66,10 @@ export function SharedConsolePage() {
       setStatusError(lastError instanceof Error ? lastError.message : "unknown error");
     }
   };
+
+  useEffect(() => {
+    void loadAutoRestart();
+  }, [loadAutoRestart]);
 
   const runLifecycle = async (action: "start" | "stop" | "restart" | "reinstall") => {
     let actionError: string | null = null;
@@ -106,6 +122,22 @@ export function SharedConsolePage() {
   const isRunning = status?.running;
   const metrics = metricsFrame?.metrics;
 
+  const updateAutoRestart = async (checked: boolean) => {
+    setAutoRestartSaving(true);
+    try {
+      const next = await api.putAutoRestart({
+        enabled: checked,
+        trigger_now: checked && !isRunning,
+      });
+      setAutoRestart(next);
+      await refreshWithRetry();
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : "unknown error");
+    } finally {
+      setAutoRestartSaving(false);
+    }
+  };
+
   return (
     <PanelScaffold
       className="console-scrollbar"
@@ -141,6 +173,27 @@ export function SharedConsolePage() {
                 ) : (
                   <Button onClick={() => void runLifecycle("start")}>启动</Button>
                 )}
+              </div>
+              <div className="rounded border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm">自动自启</span>
+                  <Switch
+                    checked={Boolean(autoRestart?.enabled)}
+                    disabled={autoRestartSaving}
+                    onCheckedChange={(checked) => void updateAutoRestart(checked)}
+                  />
+                </div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  {autoRestart?.blocked
+                    ? "已暂停"
+                    : autoRestart?.observing
+                      ? "启动观察中"
+                      : autoRestart?.enabled
+                        ? "已开启"
+                        : "已关闭"}
+                  {" "}
+                  {autoRestart ? `${autoRestart.fail_count}/${autoRestart.max_failures}` : "0/5"}
+                </div>
               </div>
             </CardContent>
           </Card>

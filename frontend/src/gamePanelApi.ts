@@ -37,6 +37,19 @@ export interface MetricsFrame {
   ts: number;
 }
 
+export interface AutoRestartStatus {
+  enabled: boolean;
+  fail_count: number;
+  max_failures: number;
+  blocked: boolean;
+  observing: boolean;
+  observing_since?: string | null;
+  last_started_at?: string | null;
+  last_failure_at?: string | null;
+  last_success_at?: string | null;
+  block_reason?: string | null;
+}
+
 type LokiRangeResponse = {
   status?: string;
   data?: {
@@ -124,6 +137,15 @@ export function createGamePanelApi() {
     },
     getProcessStatus<T>() {
       return request<T>(buildServerPath("/process/status"));
+    },
+    getAutoRestart<T extends AutoRestartStatus>() {
+      return request<T>(buildServerPath("/auto-restart"));
+    },
+    putAutoRestart<T extends AutoRestartStatus>(body: { enabled: boolean; trigger_now?: boolean }) {
+      return request<T>(buildServerPath("/auto-restart"), {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
     },
     getConfig<T>() {
       return request<T>(buildServerPath("/config"));

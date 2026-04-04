@@ -1,3 +1,4 @@
+pub mod auto_restart;
 pub mod grafana;
 pub mod loki;
 pub mod manager_rules;
