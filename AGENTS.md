@@ -19,3 +19,10 @@
 - Retry interval is fixed to 10 seconds.
 - The blocked threshold is fixed to 5 consecutive failures.
 - Automatic restart only applies to abnormal stops. Manual stop, install, reinstall, suspend, and undeployed states are excluded.
+
+## Frontend Panel Scope
+
+- `game/share_lib/frontend` 内的面板级共享代码必须把样式作用域限制在子应用根容器或 `:host`。
+- 统一使用 `data-game-panel-root` 作为挂载容器标记；共享 bootstrap 工具和共享页面默认以这个标记作为样式范围入口。
+- 不允许在 shared frontend 新增会直接作用到宿主 `html`、`body`、`:root`、全局 `.dark` 或裸 `*` 的基础样式。
+- 如果共享组件需要主题变量、字体、背景、边框或表单基础规则，必须写成 `[data-game-panel-root]` 或 `:host` 范围内的规则。
