@@ -413,12 +413,18 @@ export function createGamePanelApi() {
     adminRecreateInstance<T = unknown>() {
       const serverId = getServerId();
       if (!serverId) throw new Error("missing server id");
-      return request<T>(`/api/admin/instances/${serverId}/recreate`, { method: "POST" }, "admin");
+      return request<T>(`/api/admin/instances/${serverId}/recreate`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }, "admin");
     },
     adminReinstallInstance<T = unknown>() {
       const serverId = getServerId();
       if (!serverId) throw new Error("missing server id");
-      return request<T>(`/api/admin/instances/${serverId}/reinstall`, { method: "POST" }, "admin");
+      return request<T>(`/api/admin/instances/${serverId}/reinstall`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }, "admin");
     },
   };
 }
