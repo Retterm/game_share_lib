@@ -279,18 +279,24 @@ export function useRuntimeSummary() {
   const [status, setStatus] = useState<ProcessStatus | null>(null);
   const [serverMeta, setServerMeta] = useState<ServerMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const requestSeqRef = useRef(0);
 
   const load = async () => {
+    const requestSeq = ++requestSeqRef.current;
     try {
-      setError(null);
       const [nextStatus, nextMeta] = await Promise.all([
         api.getProcessStatus<ProcessStatus>(),
         api.getServerMeta<ServerMeta>().catch(() => null),
       ]);
+      if (requestSeq !== requestSeqRef.current) return nextStatus;
+      setError(null);
       setStatus(nextStatus);
       if (nextMeta) setServerMeta(nextMeta);
       return nextStatus;
     } catch (value) {
+      if (requestSeq !== requestSeqRef.current) {
+        throw value instanceof Error ? value : new Error("stale runtime summary error");
+      }
       const message =
         value instanceof Error ? value.message : "failed to load runtime summary";
       setError(message);
