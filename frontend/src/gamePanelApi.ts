@@ -50,6 +50,11 @@ export interface AutoRestartStatus {
   block_reason?: string | null;
 }
 
+export interface Fs2UploadInitResponse {
+  upload_id: string;
+  part_size: number;
+}
+
 function unwrapPayload<T>(value: unknown): T {
   if (value && typeof value === "object" && "payload" in value) {
     const payload = (value as { payload?: unknown }).payload;
@@ -138,6 +143,29 @@ async function encodeBase64(value: string | Blob | ArrayBuffer | Uint8Array): Pr
 }
 
 export function createGamePanelApi() {
+  const authHeader = (authMode: "server" | "admin" = "server") => {
+    const token = getBearerToken(authMode);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const toRelativePath = (path: string) => String(path || "").replace(/^\/+/, "");
+
+  const parseFetchError = async (response: Response) => {
+    const text = await response.text().catch(() => "");
+    try {
+      const parsed = JSON.parse(text) as ApiEnvelope<unknown> | { error?: { message?: string } };
+      const message =
+        typeof parsed === "object" && parsed
+          ? "message" in parsed
+            ? String(parsed.message || "")
+            : String(parsed.error?.message || "")
+          : "";
+      return message || text || `request failed: ${response.status}`;
+    } catch {
+      return text || `request failed: ${response.status}`;
+    }
+  };
+
   return {
     request,
     getServerMeta<T>() {
@@ -246,6 +274,74 @@ export function createGamePanelApi() {
         method: "POST",
         body: JSON.stringify({ src, dst }),
       });
+    },
+    async fs2UploadInit(path: string, size: number, opts?: { mode?: "stream" | "multipart"; partSize?: number }) {
+      const response = await fetch(`${getApiBase()}${buildServerPath("/fs2/upload/init")}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader("server"),
+        },
+        body: JSON.stringify({
+          path: toRelativePath(path),
+          size,
+          mode: opts?.mode,
+          part_size: opts?.partSize,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseFetchError(response));
+      }
+      return response.json() as Promise<Fs2UploadInitResponse>;
+    },
+    async fs2UploadPart(
+      uploadId: string,
+      partNo: number,
+      data: Uint8Array,
+      sha256?: string,
+      signal?: AbortSignal,
+    ) {
+      const response = await fetch(`${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/parts/${partNo}`)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          ...(sha256 ? { "X-Part-SHA256": sha256 } : {}),
+          ...authHeader("server"),
+        },
+        body: data,
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(await parseFetchError(response));
+      }
+    },
+    async fs2UploadCommit(uploadId: string) {
+      const response = await fetch(`${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/commit`)}`, {
+        method: "POST",
+        headers: authHeader("server"),
+      });
+      if (!response.ok) {
+        throw new Error(await parseFetchError(response));
+      }
+    },
+    async fs2UploadAbort(uploadId: string) {
+      const response = await fetch(`${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/abort`)}`, {
+        method: "POST",
+        headers: authHeader("server"),
+      });
+      if (!response.ok) {
+        throw new Error(await parseFetchError(response));
+      }
+    },
+    async fs2UploadStatus<T = { bytes_received: number }>(uploadId: string) {
+      const response = await fetch(`${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/status`)}`, {
+        method: "GET",
+        headers: authHeader("server"),
+      });
+      if (!response.ok) {
+        throw new Error(await parseFetchError(response));
+      }
+      return response.json() as Promise<T>;
     },
     getLogSessions<T>(range?: { startNs?: string; endNs?: string }) {
       const params = new URLSearchParams();
@@ -375,7 +471,7 @@ export function createGamePanelApi() {
       const base = getApiBase();
       const token = getBearerToken("server");
       const url = new URL(`${base}${buildServerPath("/fs2/download")}`);
-      url.searchParams.set("path", path);
+      url.searchParams.set("path", toRelativePath(path));
       if (token) {
         url.searchParams.set("access_token", token);
       }

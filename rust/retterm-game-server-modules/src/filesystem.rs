@@ -99,7 +99,7 @@ impl FsService {
 
     pub async fn compress(&self, src: String, dst: String) -> Result<Value, String> {
         let src_path = resolve_inside_root(&self.root_dir, &src)?;
-        let dst_path = resolve_inside_root(&self.root_dir, &dst)?;
+        let dst_path = resolve_inside_root_allow_empty(&self.root_dir, &dst)?;
         if let Some(parent) = dst_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
@@ -339,6 +339,11 @@ fn sanitize_rel_path_non_empty(path: &str) -> Result<PathBuf, std::io::Error> {
 
 fn resolve_inside_root(root: &Path, path: &str) -> Result<PathBuf, String> {
     let rel = sanitize_rel_path_non_empty(path).map_err(|error| error.to_string())?;
+    Ok(root.join(rel))
+}
+
+fn resolve_inside_root_allow_empty(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let rel = sanitize_rel_path_allow_empty(path).map_err(|error| error.to_string())?;
     Ok(root.join(rel))
 }
 

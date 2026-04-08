@@ -2,10 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { createGamePanelApi } from "../gamePanelApi";
-import {
-  getFileType,
-  joinPath,
-} from "../lib/fileManager";
+import { joinPath, getFileType } from "../lib/fileManager";
+import { sha256Hex } from "../lib/sha256";
 
 type FsEntry = {
   name: string;
@@ -14,6 +12,7 @@ type FsEntry = {
   modified: number;
   permissions: string;
 };
+
 type DeleteConfirmState =
   | { mode: "single"; entry: FsEntry }
   | { mode: "multi" }
@@ -29,9 +28,27 @@ type DialogKind =
   | "multi-move"
   | "mkdir"
   | "new-file"
+  | "compress"
   | null;
 
+type UploadItem = {
+  file: File;
+  progress: number;
+  status: "pending" | "uploading" | "done" | "error";
+  uploadedBytes: number;
+  startTime: number;
+  lastUpdateTime: number;
+  error?: string;
+  controller?: AbortController;
+};
+
 const api = createGamePanelApi();
+const MULTIPART_THRESHOLD = 8 * 1024 * 1024;
+const PART_SIZE = 8 * 1024 * 1024;
+
+function normalizeError(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export function useFileManager() {
   const [curPath, setCurPath] = useState<string>("/");
@@ -49,8 +66,12 @@ export function useFileManager() {
   const [dialogValue, setDialogValue] = useState("");
   const [dialogSource, setDialogSource] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadAbortRequested, setUploadAbortRequested] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadAbortRequestedRef = useRef(false);
 
   const loadDir = async (path?: string) => {
     const target = typeof path === "string" ? path : curPath;
@@ -62,7 +83,7 @@ export function useFileManager() {
       setEntries(list);
       setCurPath(target);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "加载目录失败");
+      setError(normalizeError(nextError, "加载目录失败"));
     } finally {
       setLoading(false);
     }
@@ -76,7 +97,7 @@ export function useFileManager() {
     try {
       window.open(api.downloadUrl(joinPath(curPath, entry.name)), "_blank", "noopener");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "下载失败");
+      setError(normalizeError(nextError, "下载失败"));
     }
   };
 
@@ -89,7 +110,7 @@ export function useFileManager() {
       setShowEdit(true);
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "加载文件失败");
+      setError(normalizeError(nextError, "加载文件失败"));
     }
   };
 
@@ -99,7 +120,7 @@ export function useFileManager() {
       setShowEdit(false);
       await loadDir();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "保存失败");
+      setError(normalizeError(nextError, "保存失败"));
     }
   };
 
@@ -107,19 +128,138 @@ export function useFileManager() {
     const files = Array.from(event.target.files || []);
     event.target.value = "";
     if (!files.length) return;
-    setUploading(true);
+    setUploadItems(
+      files.map((file) => ({
+        file,
+        progress: 0,
+        status: "pending" as const,
+        uploadedBytes: 0,
+        startTime: 0,
+        lastUpdateTime: 0,
+      })),
+    );
+    setUploadAbortRequested(false);
+    uploadAbortRequestedRef.current = false;
+    setShowUploadDialog(true);
     setError(null);
-    let fail = 0;
-    for (const file of files) {
+  };
+
+  const updateUploadItem = (index: number, nextItem: UploadItem) => {
+    setUploadItems((prev) => prev.map((item, itemIndex) => (itemIndex === index ? nextItem : item)));
+  };
+
+  const uploadFiles = async () => {
+    if (!uploadItems.length || isUploading) return;
+    setIsUploading(true);
+    setUploadAbortRequested(false);
+    uploadAbortRequestedRef.current = false;
+    let failures = 0;
+
+    for (let index = 0; index < uploadItems.length; index += 1) {
+      if (uploadAbortRequestedRef.current) break;
+      const item = uploadItems[index];
+      const controller = new AbortController();
+      const startTime = Date.now();
+      updateUploadItem(index, {
+        ...item,
+        controller,
+        status: "uploading",
+        startTime,
+        lastUpdateTime: startTime,
+        uploadedBytes: 0,
+        progress: 0,
+        error: undefined,
+      });
+
       try {
-        await api.writeFile(joinPath(curPath, file.name), file);
-      } catch {
-        fail += 1;
+        const targetPath = joinPath(curPath, item.file.name);
+        if (item.file.size < MULTIPART_THRESHOLD) {
+          await api.writeFile(targetPath, item.file);
+          updateUploadItem(index, {
+            ...item,
+            status: "done",
+            progress: 100,
+            uploadedBytes: item.file.size,
+            startTime,
+            lastUpdateTime: Date.now(),
+          });
+          continue;
+        }
+
+        const init = await api.fs2UploadInit(targetPath, item.file.size, {
+          mode: "multipart",
+          partSize: PART_SIZE,
+        });
+        const uploadId = init.upload_id;
+        const partSize = init.part_size || PART_SIZE;
+
+        for (let offset = 0, partNo = 0; offset < item.file.size; offset += partSize, partNo += 1) {
+          if (uploadAbortRequestedRef.current) {
+            await api.fs2UploadAbort(uploadId).catch(() => undefined);
+            throw new Error("上传已取消");
+          }
+          const chunk = item.file.slice(offset, Math.min(offset + partSize, item.file.size));
+          const buffer = await chunk.arrayBuffer();
+          const digest = await sha256Hex(buffer);
+          await api.fs2UploadPart(uploadId, partNo, new Uint8Array(buffer), digest, controller.signal);
+          const uploadedBytes = Math.min(offset + chunk.size, item.file.size);
+          updateUploadItem(index, {
+            ...item,
+            controller,
+            status: "uploading",
+            progress: Math.round((uploadedBytes / item.file.size) * 100),
+            uploadedBytes,
+            startTime,
+            lastUpdateTime: Date.now(),
+          });
+        }
+
+        await api.fs2UploadCommit(uploadId);
+        updateUploadItem(index, {
+          ...item,
+          status: "done",
+          progress: 100,
+          uploadedBytes: item.file.size,
+          startTime,
+          lastUpdateTime: Date.now(),
+        });
+      } catch (nextError) {
+        failures += 1;
+        updateUploadItem(index, {
+          ...item,
+          status: "error",
+          error: normalizeError(nextError, "上传失败"),
+          uploadedBytes: item.file.size ? Math.min(item.file.size, item.file.size) : 0,
+          lastUpdateTime: Date.now(),
+          startTime: startTime || Date.now(),
+        });
       }
     }
-    setUploading(false);
-    if (fail > 0) setError(`部分文件上传失败：${fail} 个`);
+
+    setIsUploading(false);
+    if (failures > 0) {
+      setError(`部分文件上传失败：${failures} 个`);
+    }
+    if (!uploadAbortRequestedRef.current) {
+      await loadDir();
+    }
+  };
+
+  const cancelUploads = async () => {
+    setUploadAbortRequested(true);
+    uploadAbortRequestedRef.current = true;
+    setIsUploading(false);
+    setUploadItems((prev) => {
+      prev.forEach((item) => item.controller?.abort());
+      return [...prev];
+    });
     await loadDir();
+  };
+
+  const closeUploadDialog = () => {
+    if (isUploading) return;
+    setShowUploadDialog(false);
+    setUploadItems([]);
   };
 
   const requestDeleteEntry = (entry: FsEntry) => {
@@ -138,23 +278,25 @@ export function useFileManager() {
         const target = joinPath(curPath, deleteConfirm.entry.name);
         await api.delete(target, deleteConfirm.entry.is_directory);
       } else {
-        let fail = 0;
+        let failures = 0;
         for (const name of Array.from(selectedFiles)) {
           const entry = entries.find((item) => item.name === name);
           if (!entry) continue;
           try {
             await api.delete(joinPath(curPath, name), entry.is_directory);
           } catch {
-            fail += 1;
+            failures += 1;
           }
         }
         setSelectedFiles(new Set());
-        if (fail > 0) setError(`部分删除失败：${fail} 项`);
+        if (failures > 0) {
+          setError(`部分删除失败：${failures} 项`);
+        }
       }
       setDeleteConfirm(null);
       await loadDir();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "删除失败");
+      setError(normalizeError(nextError, "删除失败"));
     }
   };
 
@@ -194,11 +336,27 @@ export function useFileManager() {
         await api.mkdir(joinPath(curPath, value));
       } else if (dialogKind === "new-file") {
         await api.writeFile(joinPath(curPath, value), "");
+      } else if (dialogKind === "compress") {
+        await api.compress(joinPath(curPath, dialogSource), value);
       }
       closeDialog();
       await loadDir();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "执行文件操作失败");
+      setError(normalizeError(nextError, "执行文件操作失败"));
+    }
+  };
+
+  const compressEntry = (name: string) => {
+    const defaultTarget = joinPath(curPath, `${name}.zip`);
+    openDialog("compress", name, defaultTarget);
+  };
+
+  const decompressEntry = async (name: string) => {
+    try {
+      await api.decompress(joinPath(curPath, name), curPath);
+      await loadDir();
+    } catch (nextError) {
+      setError(normalizeError(nextError, "解压失败"));
     }
   };
 
@@ -299,7 +457,7 @@ export function useFileManager() {
     setDialogValue,
     dialogSource,
     deleteConfirm,
-    uploading,
+    uploading: isUploading,
     fileInputRef,
     loadDir,
     openEntry,
@@ -316,5 +474,13 @@ export function useFileManager() {
     toggleFileSelection,
     selectAll,
     toggleSort,
+    compressEntry,
+    decompressEntry,
+    showUploadDialog,
+    closeUploadDialog,
+    uploadItems,
+    uploadFiles,
+    cancelUploads,
+    uploadAbortRequested,
   };
 }

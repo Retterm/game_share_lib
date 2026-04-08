@@ -5,6 +5,7 @@ import { FileFilterBar } from "../components/file/FileFilterBar";
 import { FileSelectionBar } from "../components/file/FileSelectionBar";
 import { FileTable } from "../components/file/FileTable";
 import { FileToolbar } from "../components/file/FileToolbar";
+import { FileUploadDialog } from "../components/file/FileUploadDialog";
 import { PanelScaffold } from "../components/page/PanelScaffold";
 import { PanelSurface } from "../components/page/PanelSurface";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
@@ -52,6 +53,13 @@ export function SharedFilesPage() {
     toggleFileSelection,
     selectAll,
     toggleSort,
+    compressEntry,
+    decompressEntry,
+    showUploadDialog,
+    closeUploadDialog,
+    uploadItems,
+    uploadFiles,
+    cancelUploads,
   } = useFileManager();
 
   return (
@@ -111,6 +119,8 @@ export function SharedFilesPage() {
             onRename={(name) => openDialog("rename", name, name)}
             onCopy={(name) => openDialog("copy", name, `${name}_copy`)}
             onMove={(name) => openDialog("move", name, joinPath(curPath, name))}
+            onCompress={(name) => compressEntry(name)}
+            onDecompress={(name) => void decompressEntry(name)}
             onDelete={(entry) => requestDeleteEntry(entry)}
             onNavigateParent={(path) => void loadDir(path)}
           />
@@ -152,6 +162,15 @@ export function SharedFilesPage() {
         destructive
         onConfirm={() => void confirmDelete()}
         onClose={cancelDelete}
+      />
+
+      <FileUploadDialog
+        open={showUploadDialog}
+        items={uploadItems}
+        uploading={uploading}
+        onClose={closeUploadDialog}
+        onStart={() => void uploadFiles()}
+        onCancel={() => void cancelUploads()}
       />
     </PanelScaffold>
   );

@@ -6,6 +6,7 @@ import {
   formatFileTimestamp,
   getFileGlyph,
   getFileType,
+  isCompressed,
   isEditableFile,
   parentDirectory,
 } from "../../lib/fileManager";
@@ -17,6 +18,8 @@ type FsEntry = {
   modified: number;
   permissions: string;
 };
+
+type SortBy = "name" | "size" | "modified" | "type";
 
 interface FileTableProps {
   path: string;
@@ -34,6 +37,8 @@ interface FileTableProps {
   onRename: (name: string) => void;
   onCopy: (name: string) => void;
   onMove: (name: string) => void;
+  onCompress: (name: string) => void;
+  onDecompress: (name: string) => void;
   onDelete: (entry: FsEntry) => void;
   onNavigateParent: (path: string) => void;
 }
@@ -54,6 +59,8 @@ export function FileTable({
   onRename,
   onCopy,
   onMove,
+  onCompress,
+  onDecompress,
   onDelete,
   onNavigateParent,
 }: FileTableProps) {
@@ -161,6 +168,14 @@ export function FileTable({
                       <Button size="sm" variant="ghost" onClick={() => onMove(entry.name)}>
                         移动
                       </Button>
+                      <Button size="sm" variant="ghost" onClick={() => onCompress(entry.name)}>
+                        压缩
+                      </Button>
+                      {!entry.is_directory && isCompressed(entry.name) ? (
+                        <Button size="sm" variant="ghost" onClick={() => onDecompress(entry.name)}>
+                          解压
+                        </Button>
+                      ) : null}
                       <Button size="sm" variant="destructive" onClick={() => onDelete(entry)}>
                         删除
                       </Button>
