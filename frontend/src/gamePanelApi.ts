@@ -55,6 +55,17 @@ export interface Fs2UploadInitResponse {
   part_size: number;
 }
 
+export function formatUploadError(error: unknown): string {
+  const raw = String((error as { message?: unknown } | null)?.message ?? error ?? "未知错误");
+  if (raw.includes("413") || raw.includes("Request Entity Too Large")) {
+    return "上传分片过大，入口网关拒绝了当前请求体大小（HTTP 413）";
+  }
+  if (raw.includes("Failed to fetch")) {
+    return "上传请求未成功送达服务端，常见原因是入口网关限制了分片大小，或错误响应未带跨域头";
+  }
+  return raw;
+}
+
 function unwrapPayload<T>(value: unknown): T {
   if (value && typeof value === "object" && "payload" in value) {
     const payload = (value as { payload?: unknown }).payload;

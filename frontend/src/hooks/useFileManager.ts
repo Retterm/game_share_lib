@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { createGamePanelApi } from "../gamePanelApi";
+import { formatUploadError } from "../gamePanelApi";
 import { joinPath, getFileType } from "../lib/fileManager";
 import { sha256Hex } from "../lib/sha256";
 
@@ -228,7 +229,7 @@ export function useFileManager() {
         updateUploadItem(index, {
           ...item,
           status: "error",
-          error: normalizeError(nextError, "上传失败"),
+          error: formatUploadError(nextError) || normalizeError(nextError, "上传失败"),
           uploadedBytes: item.file.size ? Math.min(item.file.size, item.file.size) : 0,
           lastUpdateTime: Date.now(),
           startTime: startTime || Date.now(),
