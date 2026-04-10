@@ -237,7 +237,7 @@ export function useFileManager() {
         const uploadId = init.upload_id;
         const partSize = init.part_size || PART_SIZE;
 
-        for (let offset = 0, partNo = 0; offset < item.file.size; offset += partSize, partNo += 1) {
+        for (let offset = 0, partNo = 1; offset < item.file.size; offset += partSize, partNo += 1) {
           if (uploadAbortRequestedRef.current) {
             await api.fs2UploadAbort(uploadId).catch(() => undefined);
             throw new Error("上传已取消");
