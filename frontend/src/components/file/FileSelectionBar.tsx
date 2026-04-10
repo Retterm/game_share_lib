@@ -1,8 +1,10 @@
 import { Button } from "../ui/button";
+import { testAttrs } from "../../lib/testAttrs";
 
 interface FileSelectionBarProps {
   count: number;
   currentPath: string;
+  onCompress: () => void;
   onDelete: () => void;
   onCopy: (path: string) => void;
   onMove: (path: string) => void;
@@ -12,6 +14,7 @@ interface FileSelectionBarProps {
 export function FileSelectionBar({
   count,
   currentPath,
+  onCompress,
   onDelete,
   onCopy,
   onMove,
@@ -19,8 +22,11 @@ export function FileSelectionBar({
 }: FileSelectionBarProps) {
   if (count <= 0) return null;
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-muted p-2">
+    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">
       <span className="text-sm">已选择 {count} 项</span>
+      <Button {...testAttrs("compress-selected-button")} variant="outline" size="sm" onClick={onCompress}>
+        压缩选中
+      </Button>
       <Button variant="destructive" size="sm" onClick={onDelete}>
         删除选中
       </Button>

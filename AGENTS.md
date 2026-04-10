@@ -20,6 +20,13 @@
 - The blocked threshold is fixed to 5 consecutive failures.
 - Automatic restart only applies to abnormal stops. Manual stop, install, reinstall, suspend, and undeployed states are excluded.
 
+## Archive Manager
+
+- Archive work for game files belongs in shared server modules, not in per-game manager sagas and not in per-game duplicated zip handlers.
+- The shared archive manager owns queueing, execution, cancellation, short-lived task retention, and path safety checks.
+- Shared frontend files pages must surface the archive queue through one consistent dropdown entrypoint inside the file manager toolbar.
+- Game-specific frontends may keep only thin wrappers around the shared files page and must not fork archive queue UI or archive API contracts.
+
 ## Frontend Panel Scope
 
 - `game/share_lib/frontend` 内的面板级共享代码必须把样式作用域限制在子应用根容器或 `:host`。

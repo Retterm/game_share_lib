@@ -1,6 +1,6 @@
 import { FileGlyph } from "./FileGlyph";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { testAttrs } from "../../lib/testAttrs";
 import {
   formatFileSize,
   formatFileTimestamp,
@@ -66,16 +66,21 @@ export function FileTable({
 }: FileTableProps) {
   return (
     <div className="min-h-0 flex-1">
-      <Card className="flex h-full flex-col">
-        <CardHeader className="flex-shrink-0">
-          <CardTitle className="text-base">文件列表 {filterType ? `(${entries.length}/${allEntriesCount})` : ""}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-auto">
+      <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
+          <div className="text-base font-semibold text-foreground">
+            文件列表 {filterType ? `(${entries.length}/${allEntriesCount})` : ""}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {entries.length} 项
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto">
           {error ? <div className="mb-2 text-sm text-red-500">{error}</div> : null}
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-[hsl(var(--tw-card))]">
               <tr className="border-b text-left text-muted-foreground">
-                <th className="py-2 pr-2">
+                <th className="py-2 pr-2 pl-3">
                   <input
                     type="checkbox"
                     checked={selectedFiles.size === entries.length && entries.length > 0}
@@ -109,8 +114,8 @@ export function FileTable({
               {entries.map((entry) => {
                 const { label, className } = getFileGlyph(entry);
                 return (
-                  <tr key={entry.name} className="border-t hover:bg-muted/40">
-                    <td className="py-2 pr-2">
+                  <tr key={entry.name} {...testAttrs(`file-row-${entry.name}`)} className="border-t hover:bg-muted/40">
+                    <td className="py-2 pr-2 pl-3">
                       <input
                         type="checkbox"
                         checked={selectedFiles.has(entry.name)}
@@ -144,12 +149,22 @@ export function FileTable({
                     <td className="py-2 pr-2">{getFileType(entry)}</td>
                     <td className="space-x-1 py-2 pr-2 text-right">
                       {entry.is_directory ? (
-                        <Button size="sm" variant="outline" onClick={() => onOpen(entry)}>
+                        <Button
+                          {...testAttrs(`file-open-${entry.name}`)}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onOpen(entry)}
+                        >
                           进入
                         </Button>
                       ) : (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => onOpen(entry)}>
+                          <Button
+                            {...testAttrs(`file-download-${entry.name}`)}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onOpen(entry)}
+                          >
                             下载
                           </Button>
                           {isEditableFile(entry.name) ? (
@@ -168,11 +183,21 @@ export function FileTable({
                       <Button size="sm" variant="ghost" onClick={() => onMove(entry.name)}>
                         移动
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => onCompress(entry.name)}>
+                      <Button
+                        {...testAttrs(`file-compress-${entry.name}`)}
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onCompress(entry.name)}
+                      >
                         压缩
                       </Button>
                       {!entry.is_directory && isCompressed(entry.name) ? (
-                        <Button size="sm" variant="ghost" onClick={() => onDecompress(entry.name)}>
+                        <Button
+                          {...testAttrs(`file-decompress-${entry.name}`)}
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onDecompress(entry.name)}
+                        >
                           解压
                         </Button>
                       ) : null}
@@ -185,15 +210,15 @@ export function FileTable({
               })}
               {!allEntriesCount && !loading ? (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-sm text-muted-foreground">
+                  <td colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
                     空
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

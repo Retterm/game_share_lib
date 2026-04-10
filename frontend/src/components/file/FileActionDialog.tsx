@@ -68,7 +68,9 @@ export function FileActionDialog({
           : kind === "new-file"
             ? "输入要创建的文件名"
             : kind === "compress"
-              ? "输入压缩文件输出路径"
+              ? selectedCount > 0
+                ? `已选择 ${selectedCount} 项`
+                : "输入压缩文件输出路径"
             : undefined;
 
   const placeholder =

@@ -55,6 +55,24 @@ export interface Fs2UploadInitResponse {
   part_size: number;
 }
 
+export interface ArchiveTaskView {
+  id: string;
+  kind: "compress" | "decompress";
+  status: "queued" | "running" | "canceling" | "success" | "failed" | "canceled";
+  source_items: string[];
+  target_path: string;
+  created_at: number;
+  started_at?: number | null;
+  finished_at?: number | null;
+  current_item?: string | null;
+  items_total: number;
+  items_done: number;
+  bytes_total: number;
+  bytes_done: number;
+  message?: string | null;
+  can_cancel: boolean;
+}
+
 export function formatUploadError(error: unknown): string {
   const raw = String((error as { message?: unknown } | null)?.message ?? error ?? "未知错误");
   if (raw.includes("413") || raw.includes("Request Entity Too Large")) {
@@ -72,6 +90,24 @@ function unwrapPayload<T>(value: unknown): T {
     return (payload ?? value) as T;
   }
   return value as T;
+}
+
+function unwrapRpcPayload<T>(value: unknown): T {
+  if (value && typeof value === "object" && "status" in value) {
+    const rpc = value as {
+      status?: unknown;
+      payload?: unknown;
+      error?: { message?: unknown } | null;
+    };
+    if (rpc.status === "error") {
+      const message =
+        rpc.error && typeof rpc.error === "object" && "message" in rpc.error
+          ? String(rpc.error.message || "")
+          : "";
+      throw new Error(message || "request failed");
+    }
+  }
+  return unwrapPayload<T>(value);
 }
 
 type LokiRangeResponse = {
@@ -231,60 +267,105 @@ export function createGamePanelApi() {
       });
     },
     listFiles<T>(path = "") {
-      return request<T>(buildServerPath("/fs/list"), {
+      return request<unknown>(buildServerPath("/fs/list"), {
         method: "POST",
         body: JSON.stringify({ path }),
-      });
+      }).then((payload) => unwrapRpcPayload<T>(payload));
     },
     async readFile(path: string) {
-      const payload = await request<{ content_base64: string; size: number }>(buildServerPath("/fs/read"), {
+      const payload = await request<unknown>(buildServerPath("/fs/read"), {
         method: "POST",
         body: JSON.stringify({ path }),
       });
-      return { content: decodeBase64(payload.content_base64), size: payload.size };
+      const unwrapped = unwrapRpcPayload<{ content_base64: string; size: number }>(payload);
+      return { content: decodeBase64(unwrapped.content_base64), size: unwrapped.size };
     },
     async writeFile(path: string, content: string | Blob | ArrayBuffer | Uint8Array) {
       const content_base64 = await encodeBase64(content);
-      return request(buildServerPath("/fs/write"), {
+      const payload = await request<unknown>(buildServerPath("/fs/write"), {
         method: "POST",
         body: JSON.stringify({ path, content_base64 }),
       });
+      return unwrapRpcPayload(payload);
     },
     mkdir(path: string) {
-      return request(buildServerPath("/fs/mkdir"), {
+      return request<unknown>(buildServerPath("/fs/mkdir"), {
         method: "POST",
         body: JSON.stringify({ path }),
-      });
+      }).then((payload) => unwrapRpcPayload(payload));
     },
     rename(from: string, to: string) {
-      return request(buildServerPath("/fs/rename"), {
+      return request<unknown>(buildServerPath("/fs/rename"), {
         method: "POST",
         body: JSON.stringify({ from, to }),
-      });
+      }).then((payload) => unwrapRpcPayload(payload));
     },
     copy(from: string, to: string) {
-      return request(buildServerPath("/fs/copy"), {
+      return request<unknown>(buildServerPath("/fs/copy"), {
         method: "POST",
         body: JSON.stringify({ from, to }),
-      });
+      }).then((payload) => unwrapRpcPayload(payload));
     },
     delete(path: string, recursive = false) {
-      return request(buildServerPath("/fs/delete"), {
+      return request<unknown>(buildServerPath("/fs/delete"), {
         method: "POST",
         body: JSON.stringify({ path, recursive }),
-      });
+      }).then((payload) => unwrapRpcPayload(payload));
     },
     compress(src: string, dst: string) {
-      return request(buildServerPath("/fs/compress"), {
+      return request<unknown>(buildServerPath("/fs/compress"), {
         method: "POST",
         body: JSON.stringify({ src, dst }),
-      });
+      }).then((payload) => unwrapRpcPayload(payload));
     },
     decompress(src: string, dst: string) {
-      return request(buildServerPath("/fs/decompress"), {
+      return request<unknown>(buildServerPath("/fs/decompress"), {
+        method: "POST",
+        body: JSON.stringify({ src, dst }),
+      }).then((payload) => unwrapRpcPayload(payload));
+    },
+    async createCompressTask(root: string, sources: string[], dst: string) {
+      const payload = await request<unknown>(buildServerPath("/fs/compress"), {
+        method: "POST",
+        body: JSON.stringify({ root, sources, dst }),
+      });
+      return unwrapRpcPayload<ArchiveTaskView>(payload);
+    },
+    async createDecompressTask(src: string, dst: string) {
+      const payload = await request<unknown>(buildServerPath("/fs/decompress"), {
         method: "POST",
         body: JSON.stringify({ src, dst }),
       });
+      return unwrapRpcPayload<ArchiveTaskView>(payload);
+    },
+    async listArchiveTasks() {
+      const payload = await request<unknown>(buildServerPath("/fs/tasks"));
+      return unwrapRpcPayload<{ items: ArchiveTaskView[] }>(payload);
+    },
+    async cancelArchiveTask(taskId: string) {
+      const payload = await request<unknown>(buildServerPath(`/fs/tasks/${taskId}/cancel`), {
+        method: "POST",
+      });
+      return unwrapRpcPayload<ArchiveTaskView>(payload);
+    },
+    openArchiveTaskSocket(
+      onMessage: (payload: { items: ArchiveTaskView[] }) => void,
+      onError?: (message: string) => void,
+    ) {
+      if (typeof window === "undefined") return null;
+      const socket = new WebSocket(buildWebSocketUrl(buildServerPath("/ws/fs/tasks")));
+      socket.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(String(event.data)) as { items?: ArchiveTaskView[] };
+          onMessage({ items: parsed.items || [] });
+        } catch (error) {
+          onError?.(error instanceof Error ? error.message : "invalid archive task frame");
+        }
+      };
+      socket.onerror = () => {
+        onError?.("archive task websocket error");
+      };
+      return socket;
     },
     async fs2UploadInit(path: string, size: number, opts?: { mode?: "stream" | "multipart"; partSize?: number }) {
       const response = await fetch(`${getApiBase()}${buildServerPath("/fs2/upload/init")}`, {

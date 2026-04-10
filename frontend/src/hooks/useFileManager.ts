@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { createGamePanelApi } from "../gamePanelApi";
+import type { ArchiveTaskView } from "../gamePanelApi";
 import { formatUploadError } from "../gamePanelApi";
 import { joinPath, getFileType } from "../lib/fileManager";
 import { sha256Hex } from "../lib/sha256";
@@ -71,8 +72,50 @@ export function useFileManager() {
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadAbortRequested, setUploadAbortRequested] = useState(false);
+  const [archiveTasks, setArchiveTasks] = useState<ArchiveTaskView[]>([]);
+  const [archiveTick, setArchiveTick] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAbortRequestedRef = useRef(false);
+  const archiveRefreshTimerRef = useRef<number | null>(null);
+  const refreshedSuccessTaskIdsRef = useRef<Set<string>>(new Set());
+  const archiveHttpSnapshotRef = useRef<{ at: number; ids: Set<string> }>({
+    at: 0,
+    ids: new Set<string>(),
+  });
+
+  const applyArchiveTasks = (
+    nextTasks: ArchiveTaskView[],
+    source: "http" | "ws",
+  ) => {
+    if (source === "http") {
+      archiveHttpSnapshotRef.current = {
+        at: Date.now(),
+        ids: new Set(nextTasks.map((task) => task.id)),
+      };
+      setArchiveTasks(nextTasks);
+      return;
+    }
+
+    const snapshot = archiveHttpSnapshotRef.current;
+    const recentlySynced = snapshot.at > 0 && Date.now() - snapshot.at < 10_000;
+    if (!recentlySynced) {
+      setArchiveTasks(nextTasks);
+      return;
+    }
+
+    const filtered = nextTasks.filter(
+      (task) => snapshot.ids.has(task.id) || task.created_at >= snapshot.at - 1_000,
+    );
+    setArchiveTasks(filtered);
+  };
+
+  const upsertArchiveTask = (task: ArchiveTaskView) => {
+    setArchiveTasks((prev) => {
+      const next = prev.filter((item) => item.id !== task.id);
+      next.unshift(task);
+      return next;
+    });
+  };
 
   const loadDir = async (path?: string) => {
     const target = typeof path === "string" ? path : curPath;
@@ -81,7 +124,7 @@ export function useFileManager() {
     setSelectedFiles(new Set());
     try {
       const list = await api.listFiles<FsEntry[]>(target);
-      setEntries(list);
+      setEntries(Array.isArray(list) ? list : []);
       setCurPath(target);
     } catch (nextError) {
       setError(normalizeError(nextError, "加载目录失败"));
@@ -313,6 +356,17 @@ export function useFileManager() {
     setDialogValue("");
   };
 
+  const loadArchiveTasks = async (options?: { silent?: boolean }) => {
+    try {
+      const payload = await api.listArchiveTasks();
+      applyArchiveTasks(payload.items || [], "http");
+    } catch (nextError) {
+      if (!options?.silent) {
+        setError(normalizeError(nextError, "加载压缩任务失败"));
+      }
+    }
+  };
+
   const submitDialog = async () => {
     const value = dialogValue.trim();
     if (!dialogKind || !value) return;
@@ -338,7 +392,14 @@ export function useFileManager() {
       } else if (dialogKind === "new-file") {
         await api.writeFile(joinPath(curPath, value), "");
       } else if (dialogKind === "compress") {
-        await api.compress(joinPath(curPath, dialogSource), value);
+        const sources = dialogSource ? [dialogSource] : Array.from(selectedFiles);
+        const task = await api.createCompressTask(curPath, sources, value);
+        setArchiveTick((prev) => prev + 1);
+        upsertArchiveTask(task);
+        if (!dialogSource) {
+          setSelectedFiles(new Set());
+        }
+        void loadArchiveTasks({ silent: true });
       }
       closeDialog();
       await loadDir();
@@ -352,12 +413,29 @@ export function useFileManager() {
     openDialog("compress", name, defaultTarget);
   };
 
+  const compressSelected = async () => {
+    if (selectedFiles.size === 0) return;
+    openDialog("compress", "", joinPath(curPath, "archive.zip"));
+  };
+
   const decompressEntry = async (name: string) => {
     try {
-      await api.decompress(joinPath(curPath, name), curPath);
-      await loadDir();
+      const task = await api.createDecompressTask(joinPath(curPath, name), curPath);
+      setArchiveTick((prev) => prev + 1);
+      upsertArchiveTask(task);
+      void loadArchiveTasks({ silent: true });
     } catch (nextError) {
       setError(normalizeError(nextError, "解压失败"));
+    }
+  };
+
+  const cancelArchiveTask = async (taskId: string) => {
+    try {
+      const task = await api.cancelArchiveTask(taskId);
+      upsertArchiveTask(task);
+      void loadArchiveTasks({ silent: true });
+    } catch (nextError) {
+      setError(normalizeError(nextError, "中断任务失败"));
     }
   };
 
@@ -433,6 +511,41 @@ export function useFileManager() {
     void loadDir("/");
   }, []);
 
+  useEffect(() => {
+    void loadArchiveTasks({ silent: true });
+    const socket = api.openArchiveTaskSocket(
+      (payload) => {
+        applyArchiveTasks(payload.items || [], "ws");
+      },
+      () => {
+        void loadArchiveTasks({ silent: true });
+      },
+    );
+    archiveRefreshTimerRef.current = window.setInterval(() => {
+      void loadArchiveTasks({ silent: true });
+    }, 3000);
+    return () => {
+      if (archiveRefreshTimerRef.current !== null) {
+        window.clearInterval(archiveRefreshTimerRef.current);
+        archiveRefreshTimerRef.current = null;
+      }
+      socket?.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const successTask = archiveTasks.find(
+      (task) =>
+        task.status === "success" &&
+        !refreshedSuccessTaskIdsRef.current.has(task.id) &&
+        (task.target_path.startsWith(curPath) || task.target_path === curPath),
+    );
+    if (successTask) {
+      refreshedSuccessTaskIdsRef.current.add(successTask.id);
+      void loadDir();
+    }
+  }, [archiveTasks, curPath]);
+
   return {
     curPath,
     setCurPath,
@@ -467,6 +580,7 @@ export function useFileManager() {
     onUploadFilesSelected,
     requestDeleteEntry,
     requestDeleteSelectedFiles,
+    compressSelected,
     confirmDelete,
     cancelDelete: () => setDeleteConfirm(null),
     openDialog,
@@ -477,6 +591,10 @@ export function useFileManager() {
     toggleSort,
     compressEntry,
     decompressEntry,
+    archiveTasks,
+    archiveTick,
+    loadArchiveTasks,
+    cancelArchiveTask,
     showUploadDialog,
     closeUploadDialog,
     uploadItems,

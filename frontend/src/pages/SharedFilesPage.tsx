@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+
+import { FileArchiveTasksDropdown } from "../components/file/FileArchiveTasksDropdown";
 import { FileActionDialog } from "../components/file/FileActionDialog";
 import { FileBreadcrumbs } from "../components/file/FileBreadcrumbs";
 import { FileEditorDialog } from "../components/file/FileEditorDialog";
@@ -13,6 +16,10 @@ import { useFileManager } from "../hooks/useFileManager";
 import { joinPath } from "../lib/fileManager";
 
 export function SharedFilesPage() {
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const archiveButtonRef = useRef<HTMLButtonElement | null>(null);
+  const archiveAreaRef = useRef<HTMLDivElement | null>(null);
   const {
     curPath,
     setCurPath,
@@ -45,6 +52,7 @@ export function SharedFilesPage() {
     onUploadFilesSelected,
     requestDeleteEntry,
     requestDeleteSelectedFiles,
+    compressSelected,
     confirmDelete,
     cancelDelete,
     openDialog,
@@ -55,12 +63,35 @@ export function SharedFilesPage() {
     toggleSort,
     compressEntry,
     decompressEntry,
+    archiveTasks,
+    archiveTick,
+    loadArchiveTasks,
+    cancelArchiveTask,
     showUploadDialog,
     closeUploadDialog,
     uploadItems,
     uploadFiles,
     cancelUploads,
   } = useFileManager();
+
+  useEffect(() => {
+    if (!archiveTick) return;
+    setLaunching(true);
+    const timer = window.setTimeout(() => setLaunching(false), 650);
+    return () => window.clearTimeout(timer);
+  }, [archiveTick]);
+
+  useEffect(() => {
+    if (!archiveOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (archiveAreaRef.current && target && !archiveAreaRef.current.contains(target)) {
+        setArchiveOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [archiveOpen]);
 
   return (
     <PanelScaffold
@@ -70,24 +101,44 @@ export function SharedFilesPage() {
       header={<FileBreadcrumbs items={breadcrumbs} onSelect={(path) => void loadDir(path)} />}
     >
       <PanelSurface className="overflow-visible">
-        <div className="flex min-h-0 flex-col">
-          <FileToolbar
-            path={curPath}
-            loading={loading}
-            uploading={uploading}
-            fileInputRef={fileInputRef}
-            onPathChange={setCurPath}
-            onPathSubmit={() => void loadDir(curPath)}
-            onRefresh={() => void loadDir(curPath)}
-            onCreateDirectory={() => openDialog("mkdir")}
-            onUploadClick={() => fileInputRef.current?.click()}
-            onCreateFile={() => openDialog("new-file")}
-            onUploadSelected={(event) => void onUploadFilesSelected(event)}
-          />
+        <div className="flex min-h-0 flex-col p-2 sm:p-3">
+          <div ref={archiveAreaRef} className="relative">
+            <FileToolbar
+              path={curPath}
+              loading={loading}
+              uploading={uploading}
+              archiveTasks={archiveTasks}
+              archiveOpen={archiveOpen}
+              archiveButtonRef={archiveButtonRef}
+              fileInputRef={fileInputRef}
+              onPathChange={setCurPath}
+              onPathSubmit={() => void loadDir(curPath)}
+              onRefresh={() => void loadDir(curPath)}
+              onCreateDirectory={() => openDialog("mkdir")}
+              onUploadClick={() => fileInputRef.current?.click()}
+              onCreateFile={() => openDialog("new-file")}
+              onArchiveClick={() => setArchiveOpen((prev) => !prev)}
+              onUploadSelected={(event) => void onUploadFilesSelected(event)}
+            />
+            <FileArchiveTasksDropdown
+              open={archiveOpen}
+              tasks={archiveTasks}
+              onRefresh={() => void loadArchiveTasks()}
+              onCancel={(taskId) => void cancelArchiveTask(taskId)}
+            />
+            {launching ? (
+              <div className="pointer-events-none absolute right-24 top-2 z-[360]">
+                <div className="animate-[archive-fly_650ms_ease-out_forwards] rounded-full bg-orange-500 px-3 py-1 text-xs font-medium text-white shadow-lg">
+                  新任务
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           <FileSelectionBar
             count={selectedFiles.size}
             currentPath={curPath}
+            onCompress={() => void compressSelected()}
             onDelete={requestDeleteSelectedFiles}
             onCopy={(path) => openDialog("multi-copy", "", path)}
             onMove={(path) => openDialog("multi-move", "", path)}
@@ -172,6 +223,18 @@ export function SharedFilesPage() {
         onStart={() => void uploadFiles()}
         onCancel={() => void cancelUploads()}
       />
+
+      <style>{`
+        @keyframes archive-fly {
+          0% { transform: translate(-220px, 32px) scale(0.7); opacity: 0; }
+          20% { opacity: 1; }
+          100% { transform: translate(0, 0) scale(1); opacity: 0; }
+        }
+        @keyframes archive-manager-pulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(249,115,22,0.12); }
+          50% { transform: scale(1.04); box-shadow: 0 0 0.75rem rgba(249,115,22,0.35); }
+        }
+      `}</style>
     </PanelScaffold>
   );
 }

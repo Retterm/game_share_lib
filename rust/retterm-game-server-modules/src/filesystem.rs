@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -8,6 +7,8 @@ use once_cell::sync::Lazy;
 use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
+
+use crate::archive_manager::ArchiveManager;
 
 #[derive(Debug, Serialize)]
 pub struct FsEntry {
@@ -29,6 +30,7 @@ struct UploadSession {
 pub struct FsService {
     root_dir: PathBuf,
     uploads: Arc<Mutex<HashMap<String, UploadSession>>>,
+    archive: Arc<ArchiveManager>,
 }
 
 static DEFAULT_UPLOADS: Lazy<Arc<Mutex<HashMap<String, UploadSession>>>> =
@@ -36,8 +38,10 @@ static DEFAULT_UPLOADS: Lazy<Arc<Mutex<HashMap<String, UploadSession>>>> =
 
 impl FsService {
     pub fn new(root_dir: impl Into<PathBuf>) -> Self {
+        let root_dir = root_dir.into();
         Self {
-            root_dir: root_dir.into(),
+            archive: Arc::new(ArchiveManager::new(root_dir.clone())),
+            root_dir,
             uploads: DEFAULT_UPLOADS.clone(),
         }
     }
@@ -98,112 +102,41 @@ impl FsService {
     }
 
     pub async fn compress(&self, src: String, dst: String) -> Result<Value, String> {
-        let src_path = resolve_inside_root(&self.root_dir, &src)?;
-        let dst_path = resolve_inside_root_allow_empty(&self.root_dir, &dst)?;
-        if let Some(parent) = dst_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|error| error.to_string())?;
-        }
+        let src_path = sanitize_rel_path_non_empty(&src).map_err(|error| error.to_string())?;
+        let root = src_path
+            .parent()
+            .map(|value| format!("/{}", value.to_string_lossy()))
+            .unwrap_or_else(|| "/".to_string());
+        let source_name = src_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| "invalid source path".to_string())?
+            .to_string();
+        self.compress_many(root, vec![source_name], dst).await
+    }
 
-        tokio::task::spawn_blocking(move || -> Result<(), String> {
-            use zip::write::{SimpleFileOptions, ZipWriter};
-
-            fn add_dir<W: Write + std::io::Seek>(
-                zip: &mut ZipWriter<W>,
-                dir: &Path,
-                prefix: &str,
-                options: SimpleFileOptions,
-            ) -> Result<(), String> {
-                for entry in std::fs::read_dir(dir).map_err(|error| error.to_string())? {
-                    let entry = entry.map_err(|error| error.to_string())?;
-                    let path = entry.path();
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    let zip_name = if prefix.is_empty() {
-                        name
-                    } else {
-                        format!("{prefix}/{name}")
-                    };
-                    let meta = entry.metadata().map_err(|error| error.to_string())?;
-                    if meta.is_dir() {
-                        add_dir(zip, &path, &zip_name, options)?;
-                    } else if meta.is_file() {
-                        zip.start_file(zip_name, options)
-                            .map_err(|error| error.to_string())?;
-                        zip.write_all(&std::fs::read(path).map_err(|error| error.to_string())?)
-                            .map_err(|error| error.to_string())?;
-                    }
-                }
-                Ok(())
-            }
-
-            let file = std::fs::File::create(&dst_path).map_err(|error| error.to_string())?;
-            let mut zip = ZipWriter::new(file);
-            let options =
-                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-            let meta = std::fs::metadata(&src_path).map_err(|error| error.to_string())?;
-            if meta.is_dir() {
-                add_dir(&mut zip, &src_path, "", options)?;
-            } else {
-                let name = src_path
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or("file");
-                zip.start_file(name, options)
-                    .map_err(|error| error.to_string())?;
-                zip.write_all(&std::fs::read(&src_path).map_err(|error| error.to_string())?)
-                    .map_err(|error| error.to_string())?;
-            }
-            zip.finish().map_err(|error| error.to_string())?;
-            Ok(())
-        })
-        .await
-        .map_err(|error| error.to_string())??;
-
-        Ok(json!({ "ok": true }))
+    pub async fn compress_many(
+        &self,
+        root: String,
+        sources: Vec<String>,
+        dst: String,
+    ) -> Result<Value, String> {
+        let task = self.archive.create_compress_task(root, sources, dst).await?;
+        Ok(serde_json::to_value(task).unwrap_or_default())
     }
 
     pub async fn decompress(&self, src: String, dst: String) -> Result<Value, String> {
-        let src_path = resolve_inside_root(&self.root_dir, &src)?;
-        let dst_path = resolve_inside_root(&self.root_dir, &dst)?;
-        tokio::fs::create_dir_all(&dst_path)
-            .await
-            .map_err(|error| error.to_string())?;
-        tokio::task::spawn_blocking(move || -> Result<(), String> {
-            let lower = src_path.to_string_lossy().to_lowercase();
-            if lower.ends_with(".zip") {
-                let file = std::fs::File::open(&src_path).map_err(|error| error.to_string())?;
-                let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
-                for index in 0..archive.len() {
-                    let mut file = archive.by_index(index).map_err(|error| error.to_string())?;
-                    let out = dst_path.join(file.mangled_name());
-                    if file.is_dir() {
-                        std::fs::create_dir_all(&out).map_err(|error| error.to_string())?;
-                    } else {
-                        if let Some(parent) = out.parent() {
-                            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-                        }
-                        let mut output =
-                            std::fs::File::create(out).map_err(|error| error.to_string())?;
-                        std::io::copy(&mut file, &mut output).map_err(|error| error.to_string())?;
-                    }
-                }
-                return Ok(());
-            }
-            if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
-                let file = std::fs::File::open(&src_path).map_err(|error| error.to_string())?;
-                let decoder = flate2::read::GzDecoder::new(file);
-                let mut archive = tar::Archive::new(decoder);
-                archive
-                    .unpack(&dst_path)
-                    .map_err(|error| error.to_string())?;
-                return Ok(());
-            }
-            Err("unsupported archive format".into())
-        })
-        .await
-        .map_err(|error| error.to_string())??;
-        Ok(json!({ "ok": true }))
+        let task = self.archive.create_decompress_task(src, dst).await?;
+        Ok(serde_json::to_value(task).unwrap_or_default())
+    }
+
+    pub async fn list_archive_tasks(&self) -> Result<Value, String> {
+        Ok(json!({ "items": self.archive.list_tasks().await }))
+    }
+
+    pub async fn cancel_archive_task(&self, task_id: String) -> Result<Value, String> {
+        let task = self.archive.cancel_task(&task_id).await?;
+        Ok(serde_json::to_value(task).unwrap_or_default())
     }
 
     pub async fn upload_init(&self, path: String, temp_prefix: &str) -> Result<Value, String> {

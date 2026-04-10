@@ -23,7 +23,7 @@ export function FileFilterBar({
       <select
         value={filterType}
         onChange={(event) => onFilterChange(event.target.value)}
-        className="h-9 rounded-md border border-[hsl(var(--tw-border))] bg-transparent px-3 py-2 text-sm"
+        className="h-8 rounded-md border border-[hsl(var(--tw-border))] bg-transparent px-2.5 py-1.5 text-sm"
       >
         <option value="">全部类型</option>
         {availableTypes.map((type) => (
@@ -37,7 +37,7 @@ export function FileFilterBar({
           清除
         </Button>
       ) : null}
-      <span className="ml-4 text-muted-foreground">
+      <span className="ml-3 text-xs text-muted-foreground">
         排序: {sortBy === "name" ? "名称" : sortBy === "size" ? "大小" : sortBy === "modified" ? "修改时间" : "类型"}
         {sortOrder === "asc" ? " ↑" : " ↓"}
       </span>
