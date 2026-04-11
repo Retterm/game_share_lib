@@ -566,6 +566,7 @@ export function createGamePanelApi() {
       url.searchParams.set("path", toRelativePath(path));
       if (token) {
         url.searchParams.set("access_token", token);
+        url.searchParams.set("token", token);
       }
       return url.toString();
     },

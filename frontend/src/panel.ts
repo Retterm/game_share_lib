@@ -70,6 +70,7 @@ export function buildWebSocketUrl(
   const token = getBearerToken(tokenMode);
   if (token) {
     url.searchParams.set("access_token", token);
+    url.searchParams.set("token", token);
   }
   if (search) {
     for (const [key, value] of Object.entries(search)) {
