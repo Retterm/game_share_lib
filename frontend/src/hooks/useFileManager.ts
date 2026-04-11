@@ -42,6 +42,7 @@ type UploadItem = {
   lastUpdateTime: number;
   error?: string;
   controller?: AbortController;
+  uploadId?: string;
 };
 
 const api = createGamePanelApi();
@@ -76,6 +77,7 @@ export function useFileManager() {
   const [archiveTick, setArchiveTick] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAbortRequestedRef = useRef(false);
+  const activeUploadIdsRef = useRef<Set<string>>(new Set());
   const archiveRefreshTimerRef = useRef<number | null>(null);
   const refreshedSuccessTaskIdsRef = useRef<Set<string>>(new Set());
   const archiveHttpSnapshotRef = useRef<{ at: number; ids: Set<string> }>({
@@ -215,6 +217,8 @@ export function useFileManager() {
         error: undefined,
       });
 
+      let uploadId: string | undefined;
+      let committed = false;
       try {
         const targetPath = joinPath(curPath, item.file.name);
         if (item.file.size < MULTIPART_THRESHOLD) {
@@ -234,12 +238,25 @@ export function useFileManager() {
           mode: "multipart",
           partSize: PART_SIZE,
         });
-        const uploadId = init.upload_id;
+        uploadId = init.upload_id;
+        activeUploadIdsRef.current.add(uploadId);
+        updateUploadItem(index, {
+          ...item,
+          controller,
+          uploadId,
+          status: "uploading",
+          startTime,
+          lastUpdateTime: Date.now(),
+          uploadedBytes: 0,
+          progress: 0,
+          error: undefined,
+        });
         const partSize = init.part_size || PART_SIZE;
 
         for (let offset = 0, partNo = 1; offset < item.file.size; offset += partSize, partNo += 1) {
           if (uploadAbortRequestedRef.current) {
             await api.fs2UploadAbort(uploadId).catch(() => undefined);
+            activeUploadIdsRef.current.delete(uploadId);
             throw new Error("上传已取消");
           }
           const chunk = item.file.slice(offset, Math.min(offset + partSize, item.file.size));
@@ -250,6 +267,7 @@ export function useFileManager() {
           updateUploadItem(index, {
             ...item,
             controller,
+            uploadId,
             status: "uploading",
             progress: Math.round((uploadedBytes / item.file.size) * 100),
             uploadedBytes,
@@ -259,8 +277,11 @@ export function useFileManager() {
         }
 
         await api.fs2UploadCommit(uploadId);
+        committed = true;
+        activeUploadIdsRef.current.delete(uploadId);
         updateUploadItem(index, {
           ...item,
+          uploadId,
           status: "done",
           progress: 100,
           uploadedBytes: item.file.size,
@@ -268,6 +289,10 @@ export function useFileManager() {
           lastUpdateTime: Date.now(),
         });
       } catch (nextError) {
+        if (uploadId && !committed) {
+          await api.fs2UploadAbort(uploadId).catch(() => undefined);
+          activeUploadIdsRef.current.delete(uploadId);
+        }
         failures += 1;
         updateUploadItem(index, {
           ...item,
@@ -293,10 +318,13 @@ export function useFileManager() {
     setUploadAbortRequested(true);
     uploadAbortRequestedRef.current = true;
     setIsUploading(false);
+    const uploadIds = Array.from(activeUploadIdsRef.current);
     setUploadItems((prev) => {
       prev.forEach((item) => item.controller?.abort());
       return [...prev];
     });
+    await Promise.all(uploadIds.map((uploadId) => api.fs2UploadAbort(uploadId).catch(() => undefined)));
+    uploadIds.forEach((uploadId) => activeUploadIdsRef.current.delete(uploadId));
     await loadDir();
   };
 

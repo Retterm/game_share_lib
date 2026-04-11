@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant, SystemTime};
 
 use base64::{Engine as _, engine::general_purpose};
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 
 use crate::archive_manager::ArchiveManager;
 
@@ -24,6 +27,7 @@ struct UploadSession {
     path: String,
     temp_path: String,
     bytes_received: u64,
+    updated_at: Instant,
 }
 
 #[derive(Clone)]
@@ -35,6 +39,81 @@ pub struct FsService {
 
 static DEFAULT_UPLOADS: Lazy<Arc<Mutex<HashMap<String, UploadSession>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+static UPLOAD_GC_RUNNING: AtomicBool = AtomicBool::new(false);
+
+fn upload_session_ttl() -> Duration {
+    let secs = std::env::var("FS_UPLOAD_SESSION_TTL_SECS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1_800);
+    Duration::from_secs(secs)
+}
+
+fn upload_gc_interval() -> Duration {
+    let secs = std::env::var("FS_UPLOAD_GC_INTERVAL_SECS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(300);
+    Duration::from_secs(secs)
+}
+
+fn ensure_upload_gc_running(uploads: Arc<Mutex<HashMap<String, UploadSession>>>) {
+    if UPLOAD_GC_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tokio::spawn(async move {
+        loop {
+            sleep(upload_gc_interval()).await;
+            cleanup_stale_upload_sessions(&uploads).await;
+            cleanup_orphan_upload_temp_files().await;
+        }
+    });
+}
+
+async fn cleanup_stale_upload_sessions(uploads: &Arc<Mutex<HashMap<String, UploadSession>>>) {
+    let ttl = upload_session_ttl();
+    let now = Instant::now();
+    let mut stale_paths = Vec::new();
+    {
+        let mut guard = uploads.lock().await;
+        guard.retain(|_, session| {
+            let fresh = now.duration_since(session.updated_at) < ttl;
+            if !fresh {
+                stale_paths.push(session.temp_path.clone());
+            }
+            fresh
+        });
+    }
+    for path in stale_paths {
+        let _ = tokio::fs::remove_file(path).await;
+    }
+}
+
+async fn cleanup_orphan_upload_temp_files() {
+    let ttl = upload_session_ttl();
+    let Ok(mut entries) = tokio::fs::read_dir(std::env::temp_dir()).await else {
+        return;
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.contains("-server-upload-") || !name.ends_with(".bin") {
+            continue;
+        }
+        let Ok(meta) = entry.metadata().await else {
+            continue;
+        };
+        let Ok(modified) = meta.modified() else {
+            continue;
+        };
+        if SystemTime::now()
+            .duration_since(modified)
+            .map(|age| age >= ttl)
+            .unwrap_or(false)
+        {
+            let _ = tokio::fs::remove_file(entry.path()).await;
+        }
+    }
+}
 
 impl FsService {
     pub fn new(root_dir: impl Into<PathBuf>) -> Self {
@@ -140,6 +219,7 @@ impl FsService {
     }
 
     pub async fn upload_init(&self, path: String, temp_prefix: &str) -> Result<Value, String> {
+        ensure_upload_gc_running(self.uploads.clone());
         let upload_id = uuid::Uuid::new_v4().to_string();
         let temp_path = std::env::temp_dir()
             .join(format!("{temp_prefix}-{upload_id}.bin"))
@@ -154,6 +234,7 @@ impl FsService {
                 path,
                 temp_path,
                 bytes_received: 0,
+                updated_at: Instant::now(),
             },
         );
         Ok(json!({ "upload_id": upload_id }))
@@ -191,10 +272,11 @@ impl FsService {
 
     pub async fn upload_status(&self, payload: Value) -> Result<Value, String> {
         let upload_id = get_upload_id(&payload)?;
-        let uploads = self.uploads.lock().await;
-        let Some(session) = uploads.get(upload_id.as_str()) else {
+        let mut uploads = self.uploads.lock().await;
+        let Some(session) = uploads.get_mut(upload_id.as_str()) else {
             return Err("upload session not found".into());
         };
+        session.updated_at = Instant::now();
         Ok(json!({
             "upload_id": upload_id,
             "path": session.path,
