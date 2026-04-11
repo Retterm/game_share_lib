@@ -18,7 +18,7 @@ export function isEditableFile(name: string): boolean {
   const ext = (name.split(".").pop() || "").toLowerCase();
   if (!ext) return false;
   return [
-    "txt", "md", "log", "json", "yaml", "yml", "toml", "ini", "conf", "cfg", "env",
+    "txt", "md", "log", "json", "yaml", "yml", "toml", "ini", "conf", "cfg", "env", "properties",
     "js", "jsx", "ts", "tsx", "css", "scss", "less", "html", "xml",
     "py", "go", "rs", "java", "php", "sql", "lua", "rb", "cs", "kt", "sh", "bash", "zsh", "ps1", "bat", "cmd",
   ].includes(ext);
@@ -47,7 +47,7 @@ export function getFileGlyph(entry: Pick<FsEntryLike, "is_directory" | "name">) 
   if (["mp3", "wav", "flac", "aac", "ogg", "m4a"].includes(ext)) return { label: "AU", className: "bg-emerald-500/15 text-emerald-600" };
   if (["js", "ts", "jsx", "tsx", "c", "cpp", "h", "hpp", "rs", "go", "py", "rb", "php", "java", "cs", "lua", "kt", "swift"].includes(ext)) return { label: "CD", className: "bg-blue-500/15 text-blue-600" };
   if (["sh", "bash", "zsh", "ps1", "bat", "cmd"].includes(ext)) return { label: "SH", className: "bg-cyan-500/15 text-cyan-600" };
-  if (["json", "yaml", "yml", "toml", "ini", "conf", "cfg", "env"].includes(ext)) return { label: "CF", className: "bg-teal-500/15 text-teal-600" };
+  if (["json", "yaml", "yml", "toml", "ini", "conf", "cfg", "env", "properties"].includes(ext)) return { label: "CF", className: "bg-teal-500/15 text-teal-600" };
   if (["sql", "sqlite", "db", "dump"].includes(ext)) return { label: "DB", className: "bg-lime-500/15 text-lime-700" };
   if (["url", "link", "desktop", "lnk"].includes(ext)) return { label: "LK", className: "bg-indigo-500/15 text-indigo-600" };
   if (["txt", "md", "rtf", "log", "pdf", "doc", "docx", "odt", "rtfd"].includes(ext)) return { label: "TX", className: "bg-slate-500/15 text-slate-700" };
