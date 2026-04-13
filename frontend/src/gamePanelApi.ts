@@ -5,6 +5,7 @@ import {
   getServerId,
   getBearerToken,
 } from "./panel";
+import { sha256Hex } from "./lib/sha256";
 
 type ApiEnvelope<T> = {
   code: number;
@@ -134,13 +135,24 @@ async function request<T>(
       ...(init?.headers || {}),
     },
   });
-  const body = (await response.json()) as ApiEnvelope<T> | T;
+  const raw = await response.text();
+  let body: ApiEnvelope<T> | T | null = null;
+  if (raw) {
+    try {
+      body = JSON.parse(raw) as ApiEnvelope<T> | T;
+    } catch {
+      if (!response.ok) {
+        throw new Error(raw || `request failed: ${response.status}`);
+      }
+      throw new Error("response is not valid JSON");
+    }
+  }
   if (!response.ok) {
     const message =
       body && typeof body === "object" && "message" in body
         ? String((body as ApiEnvelope<T>).message || "")
         : "";
-    throw new Error(message || `request failed: ${response.status}`);
+    throw new Error(message || raw || `request failed: ${response.status}`);
   }
   if (body && typeof body === "object" && "code" in body) {
     const envelope = body as ApiEnvelope<T>;
@@ -149,7 +161,7 @@ async function request<T>(
     }
     return envelope.data as T;
   }
-  return body as T;
+  return (body ?? ({} as T)) as T;
 }
 
 function decodeBase64(value?: string | null): string {
@@ -168,25 +180,11 @@ function escapeLokiString(value: string): string {
   return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-async function encodeBase64(value: string | Blob | ArrayBuffer | Uint8Array): Promise<string> {
-  if (typeof value === "string") {
-    if (typeof window !== "undefined" && typeof window.btoa === "function") {
-      return window.btoa(unescape(encodeURIComponent(value)));
-    }
-    return value;
-  }
-  if (value instanceof Blob) {
-    return encodeBase64(await value.arrayBuffer());
-  }
-  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-  let binary = "";
-  for (let index = 0; index < bytes.byteLength; index += 1) {
-    binary += String.fromCharCode(bytes[index]);
-  }
-  if (typeof window !== "undefined" && typeof window.btoa === "function") {
-    return window.btoa(binary);
-  }
-  return binary;
+function toBlob(content: string | Blob | ArrayBuffer | Uint8Array): Blob {
+  if (content instanceof Blob) return content;
+  if (typeof content === "string") return new Blob([content], { type: "text/plain;charset=utf-8" });
+  if (content instanceof Uint8Array) return new Blob([content]);
+  return new Blob([content]);
 }
 
 export function createGamePanelApi() {
@@ -281,12 +279,65 @@ export function createGamePanelApi() {
       return { content: decodeBase64(unwrapped.content_base64), size: unwrapped.size };
     },
     async writeFile(path: string, content: string | Blob | ArrayBuffer | Uint8Array) {
-      const content_base64 = await encodeBase64(content);
-      const payload = await request<unknown>(buildServerPath("/fs/write"), {
-        method: "POST",
-        body: JSON.stringify({ path, content_base64 }),
-      });
-      return unwrapRpcPayload(payload);
+      const target = toRelativePath(path);
+      const blob = toBlob(content);
+      const defaultPartSize = 2 * 1024 * 1024;
+      let uploadId = "";
+      let committed = false;
+
+      try {
+        const init = await fetch(`${getApiBase()}${buildServerPath("/fs2/upload/init")}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeader("server"),
+          },
+          body: JSON.stringify({
+            path: target,
+            size: blob.size,
+            mode: "multipart",
+            part_size: defaultPartSize,
+          }),
+        });
+        if (!init.ok) throw new Error(await parseFetchError(init));
+        const initJson = (await init.json()) as Fs2UploadInitResponse;
+        uploadId = initJson.upload_id;
+        const partSize = initJson.part_size || defaultPartSize;
+
+        for (let offset = 0, partNo = 1; offset < blob.size; offset += partSize, partNo += 1) {
+          const chunk = blob.slice(offset, Math.min(offset + partSize, blob.size));
+          const partBuffer = await chunk.arrayBuffer();
+          const partSha = await sha256Hex(partBuffer);
+          const partResp = await fetch(
+            `${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/parts/${partNo}`)}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/octet-stream",
+                "X-Part-Sha256": partSha,
+                ...authHeader("server"),
+              },
+              body: new Uint8Array(partBuffer),
+            },
+          );
+          if (!partResp.ok) throw new Error(await parseFetchError(partResp));
+        }
+
+        const commit = await fetch(`${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/commit`)}`, {
+          method: "POST",
+          headers: authHeader("server"),
+        });
+        if (!commit.ok) throw new Error(await parseFetchError(commit));
+        committed = true;
+        return { ok: true };
+      } finally {
+        if (uploadId && !committed) {
+          await fetch(`${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/abort`)}`, {
+            method: "POST",
+            headers: authHeader("server"),
+          }).catch(() => undefined);
+        }
+      }
     },
     mkdir(path: string) {
       return request<unknown>(buildServerPath("/fs/mkdir"), {
