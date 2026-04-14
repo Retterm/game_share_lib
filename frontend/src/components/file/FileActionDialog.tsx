@@ -18,6 +18,7 @@ type FileDialogKind =
   | "mkdir"
   | "new-file"
   | "compress"
+  | "decompress"
   | null;
 
 interface FileActionDialogProps {
@@ -56,7 +57,9 @@ export function FileActionDialog({
                 ? "新建目录"
                 : kind === "new-file"
                   ? "新建文件"
-                  : "压缩";
+                  : kind === "compress"
+                    ? "压缩"
+                    : "解压";
 
   const description =
     kind === "multi-copy" || kind === "multi-move"
@@ -71,10 +74,16 @@ export function FileActionDialog({
               ? selectedCount > 0
                 ? `已选择 ${selectedCount} 项`
                 : "输入压缩文件输出路径"
+              : kind === "decompress"
+                ? "输入解压目标目录"
             : undefined;
 
   const placeholder =
-    kind === "move" || kind === "multi-copy" || kind === "multi-move" || kind === "compress"
+    kind === "move" ||
+    kind === "multi-copy" ||
+    kind === "multi-move" ||
+    kind === "compress" ||
+    kind === "decompress"
       ? "目标路径"
       : kind === "mkdir"
         ? "目录名"

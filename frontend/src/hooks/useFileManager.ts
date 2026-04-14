@@ -31,6 +31,7 @@ type DialogKind =
   | "mkdir"
   | "new-file"
   | "compress"
+  | "decompress"
   | null;
 
 type UploadItem = {
@@ -46,7 +47,6 @@ type UploadItem = {
 };
 
 const api = createGamePanelApi();
-const MULTIPART_THRESHOLD = 8 * 1024 * 1024;
 const PART_SIZE = 8 * 1024 * 1024;
 
 function normalizeError(error: unknown, fallback: string): string {
@@ -221,19 +221,6 @@ export function useFileManager() {
       let committed = false;
       try {
         const targetPath = joinPath(curPath, item.file.name);
-        if (item.file.size < MULTIPART_THRESHOLD) {
-          await api.writeFile(targetPath, item.file);
-          updateUploadItem(index, {
-            ...item,
-            status: "done",
-            progress: 100,
-            uploadedBytes: item.file.size,
-            startTime,
-            lastUpdateTime: Date.now(),
-          });
-          continue;
-        }
-
         const init = await api.fs2UploadInit(targetPath, item.file.size, {
           mode: "multipart",
           partSize: PART_SIZE,
@@ -428,6 +415,11 @@ export function useFileManager() {
           setSelectedFiles(new Set());
         }
         void loadArchiveTasks({ silent: true });
+      } else if (dialogKind === "decompress") {
+        const task = await api.createDecompressTask(joinPath(curPath, dialogSource), value);
+        setArchiveTick((prev) => prev + 1);
+        upsertArchiveTask(task);
+        void loadArchiveTasks({ silent: true });
       }
       closeDialog();
       await loadDir();
@@ -447,14 +439,7 @@ export function useFileManager() {
   };
 
   const decompressEntry = async (name: string) => {
-    try {
-      const task = await api.createDecompressTask(joinPath(curPath, name), curPath);
-      setArchiveTick((prev) => prev + 1);
-      upsertArchiveTask(task);
-      void loadArchiveTasks({ silent: true });
-    } catch (nextError) {
-      setError(normalizeError(nextError, "解压失败"));
-    }
+    openDialog("decompress", name, curPath);
   };
 
   const cancelArchiveTask = async (taskId: string) => {
