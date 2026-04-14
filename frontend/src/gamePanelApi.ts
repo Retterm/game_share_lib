@@ -284,6 +284,7 @@ export function createGamePanelApi() {
       const defaultPartSize = 2 * 1024 * 1024;
       let uploadId = "";
       let committed = false;
+      const uploadMode = blob.size === 0 ? "stream" : "multipart";
 
       try {
         const init = await fetch(`${getApiBase()}${buildServerPath("/fs2/upload/init")}`, {
@@ -295,7 +296,7 @@ export function createGamePanelApi() {
           body: JSON.stringify({
             path: target,
             size: blob.size,
-            mode: "multipart",
+            mode: uploadMode,
             part_size: defaultPartSize,
           }),
         });
@@ -304,23 +305,25 @@ export function createGamePanelApi() {
         uploadId = initJson.upload_id;
         const partSize = initJson.part_size || defaultPartSize;
 
-        for (let offset = 0, partNo = 1; offset < blob.size; offset += partSize, partNo += 1) {
-          const chunk = blob.slice(offset, Math.min(offset + partSize, blob.size));
-          const partBuffer = await chunk.arrayBuffer();
-          const partSha = await sha256Hex(partBuffer);
-          const partResp = await fetch(
-            `${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/parts/${partNo}`)}`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/octet-stream",
-                "X-Part-Sha256": partSha,
-                ...authHeader("server"),
+        if (uploadMode === "multipart") {
+          for (let offset = 0, partNo = 1; offset < blob.size; offset += partSize, partNo += 1) {
+            const chunk = blob.slice(offset, Math.min(offset + partSize, blob.size));
+            const partBuffer = await chunk.arrayBuffer();
+            const partSha = await sha256Hex(partBuffer);
+            const partResp = await fetch(
+              `${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/parts/${partNo}`)}`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/octet-stream",
+                  "X-Part-Sha256": partSha,
+                  ...authHeader("server"),
+                },
+                body: new Uint8Array(partBuffer),
               },
-              body: new Uint8Array(partBuffer),
-            },
-          );
-          if (!partResp.ok) throw new Error(await parseFetchError(partResp));
+            );
+            if (!partResp.ok) throw new Error(await parseFetchError(partResp));
+          }
         }
 
         const commit = await fetch(`${getApiBase()}${buildServerPath(`/fs2/upload/${uploadId}/commit`)}`, {
