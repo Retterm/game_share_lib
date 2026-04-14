@@ -24,6 +24,7 @@ export function SharedLogsPage() {
   const [pageStarts, setPageStarts] = useState<string[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
   const [hasNext, setHasNext] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [rangeStartInput, setRangeStartInput] = useState("");
   const [rangeEndInput, setRangeEndInput] = useState("");
   const [sessionSearch, setSessionSearch] = useState("");
@@ -117,6 +118,62 @@ export function SharedLogsPage() {
     await loadSessions(nextRange);
     if (selected) {
       await resetAndLoad(selected, nextRange);
+    }
+  };
+
+  const downloadSelectedSession = async () => {
+    if (!selected || downloading) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      const startNs =
+        rangeRef.current.startNs ??
+        String((parseUnixMsFromSessionName(selected) ?? Date.now() - 30 * 24 * 3600 * 1000) * 1_000_000);
+      const lines: Array<{ ts: number; tsNs?: number; stream?: string; text: string }> = [];
+      let pageStartNs = startNs;
+      let pageCount = 0;
+      while (pageCount < 200) {
+        const result = await loadHistoricalLogs({
+          sessionName: selected,
+          searchText: "",
+          pageStartNs,
+          rangeStartNs: rangeRef.current.startNs,
+          rangeEndNs: rangeRef.current.endNs,
+        });
+        lines.push(...result.items);
+        if (!result.hasNext || !result.items.length) {
+          break;
+        }
+        const last = result.items[result.items.length - 1];
+        const lastNs = last.tsNs ?? last.ts * 1_000_000;
+        pageStartNs = String(Number(lastNs) + 1);
+        pageCount += 1;
+      }
+      lines.sort((a, b) => {
+        const an = typeof a.tsNs === "number" && Number.isFinite(a.tsNs) ? a.tsNs : a.ts * 1_000_000;
+        const bn = typeof b.tsNs === "number" && Number.isFinite(b.tsNs) ? b.tsNs : b.ts * 1_000_000;
+        return an - bn;
+      });
+      const content = lines
+        .map((item) => {
+          const stream = item.stream || "stdout";
+          return `[${formatTsNoMs(item.ts)}] [${stream}] ${item.text}`;
+        })
+        .join("\n");
+      const blob = new Blob([content + (content ? "\n" : "")], { type: "text/plain;charset=utf-8" });
+      const safeName = selected.replace(/[^\w.-]+/g, "_");
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${safeName}.log.txt`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(errorText(e, "下载日志失败"));
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -329,6 +386,14 @@ export function SharedLogsPage() {
                 {loading ? "搜索中..." : "搜索/刷新"}
               </Button>
               <div className="ml-2 flex min-h-10 items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void downloadSelectedSession()}
+                  disabled={loading || downloading || !selected}
+                >
+                  {downloading ? "导出中..." : "下载会话日志"}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
